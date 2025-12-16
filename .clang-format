@@ -1,9 +1,0 @@
-BasedOnStyle: LLVM
-IndentWidth: 4
-ColumnLimit: 80
-AllowShortFunctionsOnASingleLine: false
-BreakBeforeBraces: Allman
-DerivePointerAlignment: false
-PointerAlignment: Left
-AlignConsecutiveAssignments: true
-AlignConsecutiveDeclarations: true
