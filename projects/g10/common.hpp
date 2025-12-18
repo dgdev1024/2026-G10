@@ -51,6 +51,26 @@ namespace g10
     template <typename T, typename U = std::string>
     using result = std::expected<T, U>;
 
+    /**
+     * @brief   Defines a type representing the result of an operation that
+     *          can either succeed with a reference to a value of type T or
+     *          fail with an error message.
+     * 
+     * @tparam  T   The type of the successful result value.
+     */
+    template <typename T, typename U = std::string>
+    using result_ref = std::expected<std::reference_wrapper<T>, U>;
+
+    /**
+     * @brief   Defines a type representing the result of an operation that
+     *          can either succeed with a constant reference to a value of type
+     *          T or fail with an error message.
+     * 
+     * @tparam  T   The type of the successful result value.
+     */
+    template <typename T, typename U = std::string>
+    using result_cref = std::expected<std::reference_wrapper<const T>, U>;
+
 }
 
 /* Public Functions ***********************************************************/
