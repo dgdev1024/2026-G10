@@ -80,23 +80,6 @@ namespace g10
 
     /**
      * @brief   Helper function to create an unexpected result containing
-     *          an error value. This function is intended to be used with the
-     *          @a `g10::result` type, where the error type is not `std::string`.
-     * 
-     * @tparam  T       The type of the error value.
-     * 
-     * @param   value   The error value to encapsulate.
-     * 
-     * @return  An unexpected result containing the specified error value.
-     */
-    template <typename T>
-    inline auto error (const T& value) -> std::unexpected<T>
-    {
-        return std::unexpected<T> { value };
-    }
-
-    /**
-     * @brief   Helper function to create an unexpected result containing
      *          a formatted error message. This function is intended to be used
      *          with the @a `g10::result` type.
      * 

@@ -43,6 +43,7 @@
 .vscode/
 build/
 scratch/
+notes/
 Makefile
 *.sln
 *.vcxproj*

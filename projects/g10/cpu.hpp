@@ -102,6 +102,79 @@ namespace g10
     };
 
     /**
+     * @brief   Strongly enumerates the instruction mnemonics supported by the
+     *          G10 CPU.
+     */
+    enum class instruction : std::uint8_t
+    {
+        nop,                        /** @brief `NOP` - No Operation */
+        stop,                       /** @brief `STOP` - Enter `STOP` State */
+        halt,                       /** @brief `HALT` - Enter `HALT` State */
+        di,                         /** @brief `DI` - Disable Interrupts */
+        ei,                         /** @brief `EI` - Enable Interrupts */
+        eii,                        /** @brief `EII` - Enable Interrupts Immediately */
+        daa,                        /** @brief `DAA` - Decimal Adjust Accumulator */
+        scf,                        /** @brief `SCF` - Set Carry Flag */
+        ccf,                        /** @brief `CCF` - Complement Carry Flag */
+        clv,                        /** @brief `CLV` - Clear Overflow Flag */
+        sev,                        /** @brief `SEV` - Set Overflow Flag */
+        ld,                         /** @brief `LD` - Load */
+        ldq,                        /** @brief `LDQ` - Load Quick (relative to `$FFFF0000`) */
+        ldp,                        /** @brief `LDP` - Load Port (relative to `$FFFFFF00`) */
+        st,                         /** @brief `ST` - Store */
+        stq,                        /** @brief `STQ` - Store Quick (relative to `$FFFF0000`) */
+        stp,                        /** @brief `STP` - Store Port (relative to `$FFFFFF00`) */
+        mv,                         /** @brief `MV` - Move */
+        mwh,                        /** @brief `MWH` - Move Word High */
+        mwl,                        /** @brief `MWL` - Move Word Low */
+        lsp,                        /** @brief `LSP` - Load Stack Pointer */
+        pop,                        /** @brief `POP` - Pop from Stack */
+        ssp,                        /** @brief `SSP` - Store Stack Pointer */
+        push,                       /** @brief `PUSH` - Push to Stack */
+        spo,                        /** @brief `SPO` - Stack Pointer Out */
+        spi,                        /** @brief `SPI` - Stack Pointer In */
+        jmp,                        /** @brief `JMP` - Jump */
+        jpb,                        /** @brief `JPB` - Jump By */
+        call,                       /** @brief `CALL` - Call Subroutine */
+        int_,                       /** @brief `INT` - Software Interrupt */
+        ret,                        /** @brief `RET` - Return from Subroutine */
+        reti,                       /** @brief `RETI` - Return from Interrupt */
+        add,                        /** @brief `ADD` - Add */
+        adc,                        /** @brief `ADC` - Add with Carry */
+        sub,                        /** @brief `SUB` - Subtract */
+        sbc,                        /** @brief `SBC` - Subtract with Carry */
+        inc,                        /** @brief `INC` - Increment */
+        dec,                        /** @brief `DEC` - Decrement */
+        and_,                       /** @brief `AND` - Bitwise AND */
+        or_,                        /** @brief `OR` - Bitwise OR */
+        xor_,                       /** @brief `XOR` - Bitwise XOR */
+        not_,                       /** @brief `NOT` - Bitwise NOT */
+        cmp,                        /** @brief `CMP` - Compare */
+        sla,                        /** @brief `SLA` - Shift Left Arithmetic */
+        sra,                        /** @brief `SRA` - Shift Right Arithmetic */
+        srl,                        /** @brief `SRL` - Shift Right Logical */
+        swap,                       /** @brief `SWAP` - Swap Halves */
+        rla,                        /** @brief `RLA` - Rotate Accumulator Left Through Carry */
+        rl,                         /** @brief `RL` - Rotate Left Through Carry */
+        rlca,                       /** @brief `RLCA` - Rotate Accumulator Left Circular */
+        rlc,                        /** @brief `RLC` - Rotate Left Circular */
+        rra,                        /** @brief `RRA` - Rotate Accumulator Right Through Carry */
+        rr,                         /** @brief `RR` - Rotate Right Through Carry */
+        rrca,                       /** @brief `RRCA` - Rotate Accumulator Right Circular */
+        rrc,                        /** @brief `RRC` - Rotate Right Circular */
+        bit,                        /** @brief `BIT` - Test Bit */
+        set,                        /** @brief `SET` - Set Bit */
+        res,                        /** @brief `RES` - Reset Bit */
+        tog,                        /** @brief `TOG` - Toggle Bit */
+
+        // Aliases
+        jp,                         /** @brief `JP` - Alias for all `JMP` instructions */
+        jr,                         /** @brief `JR` - Alias for all `JPB` instructions */
+        cpl,                        /** @brief `CPL` - Alias for `NOT L0` instruction */
+        cp,                         /** @brief `CP` - Alias for all `CMP` instructions */
+    };
+
+    /**
      * @brief   Weakly enumerates the condition codes used by the G10 CPU for
      *          conditional branch instructions.
      */
