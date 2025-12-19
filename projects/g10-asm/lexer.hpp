@@ -144,6 +144,16 @@ namespace g10asm
         inline constexpr auto is_good () const -> bool
             { return m_good; }
 
+        /**
+         * @brief   Indicates whether the lexer has reached the end of its token
+         *          stream.
+         * 
+         * @return  `true` if the end of the token stream has been reached;
+         *          Otherwise, `false`.
+         */
+        inline auto is_at_end () const -> bool
+            { return m_token_index >= m_tokens.size(); }
+
     private: /* Private Methods ***********************************************/
 
         /**

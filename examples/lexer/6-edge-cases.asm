@@ -32,7 +32,7 @@ edge_cases:
     module.function.name:
 
     ; Nested brackets and parentheses
-    LD D0, [[0x9000]]            ; Nested brackets (if valid)
+    ; LD D0, [[0x9000]]            ; Nested brackets (not valid in G10 assembly language)
     ; LD D1, ((5 + 3) * 2)      ; Nested parentheses in expressions
 
     ; Adjacent operators

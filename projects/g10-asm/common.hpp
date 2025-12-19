@@ -14,11 +14,14 @@
 #include <algorithm>
 #include <filesystem>
 #include <fstream>
+#include <memory>
+#include <optional>
 #include <print>
 #include <string_view>
 #include <unordered_map>
 #include <unordered_set>
 #include <utility>
+#include <variant>
 #include <vector>
 #include <cctype>
 #include <g10/common.hpp>

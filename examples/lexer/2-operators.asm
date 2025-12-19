@@ -7,20 +7,20 @@
 test_operators:
     ; Arithmetic operators
     ADD D0, D1          ; + (addition)
-    SUB D2, D3          ; - (subtraction)
+    SUB D0, D3          ; - (subtraction)
     ; MUL D4, D5        ; * (multiplication - if supported)
     ; DIV D6, D7        ; / (division - if supported)
 
     ; Bitwise operators
     AND D0, D1          ; & (bitwise AND)
-    OR D2, D3           ; | (bitwise OR)
-    XOR D4, D5          ; ^ (bitwise XOR)
-    NOT D6              ; ~ (bitwise NOT)
+    OR D0, D3           ; | (bitwise OR)
+    XOR D0, D5          ; ^ (bitwise XOR)
+    NOT D0              ; ~ (bitwise NOT)
 
     ; Shift operators (represented in operands)
     SLA D0              ; Shift left arithmetic
-    SRA D1              ; Shift right arithmetic
-    SRL D2              ; Shift right logical
+    SRA D0              ; Shift right arithmetic
+    SRL D0              ; Shift right logical
 
     ; Comparison examples (for expressions - future parser use)
     ; a == b            ; == (equality)

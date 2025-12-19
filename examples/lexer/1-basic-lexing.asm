@@ -11,7 +11,7 @@ main:                   ; Label definition
 
 loop:
     INC W1              ; Increment 16-bit register
-    CMP W1, 100         ; Compare with decimal literal
+    CMP W0, 100         ; Compare with decimal literal
     JPB ZC, loop        ; Conditional relative jump (jump if zero clear)
 
 done:

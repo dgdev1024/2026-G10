@@ -9,6 +9,7 @@
 /* Private Includes ***********************************************************/
 
 #include <g10-asm/lexer.hpp>
+#include <g10-asm/parser.hpp>
 
 /* Private Variables **********************************************************/
 
@@ -19,6 +20,7 @@ namespace g10asm
     static bool s_help = false;
     static bool s_version = false;
     static bool s_list_tokens = false;
+    static bool s_parse_only = false;
     static std::string s_source_file = "";
 }
 
@@ -36,6 +38,9 @@ namespace g10asm
         //      If provided, the tool will print the list of tokens extracted
         //      from the provided source file after lexing. Only the tokens from
         //      this file will be printed; no included files are lexed or printed.
+        // `-p`, `--parse`:
+        //      If provided, the tool will parse the source file and print
+        //      the parsed AST structure.
         // `-h`, `--help`:
         //      Displays help/usage information.
         // `-v`, `--version`:
@@ -60,6 +65,10 @@ namespace g10asm
             else if ((arg == "-l") || (arg == "--list-tokens"))
             {
                 s_list_tokens = true;
+            }
+            else if ((arg == "-p") || (arg == "--parse"))
+            {
+                s_parse_only = true;
             }
             else if ((arg == "-h") || (arg == "--help"))
             {
@@ -98,6 +107,7 @@ namespace g10asm
         std::println("Options:");
         std::println("  -s, --source <file>    Required. Specifies the path to the assembly source file to be assembled.");
         std::println("  -l, --list-tokens      Lists the tokens extracted from the source file after lexing.");
+        std::println("  -p, --parse            Parses the source file and displays the AST structure.");
         std::println("  -h, --help             Displays this help/usage information.");
         std::println("  -v, --version          Displays version information.\n");
     }
@@ -148,6 +158,50 @@ namespace g10asm
             }
         }
     }
+
+    static auto print_parse_tree (const program& prog) -> void
+    {
+        std::println("Successfully parsed {} statements.", prog.statements.size());
+        std::println("Labels: {}", prog.label_table.size());
+        std::println("Global symbols: {}", prog.global_symbols.size());
+        std::println("Extern symbols: {}", prog.extern_symbols.size());
+        
+        std::println("\nStatements:");
+        for (std::size_t i = 0; i < prog.statements.size(); ++i)
+        {
+            const auto& stmt = prog.statements[i];
+            std::print("  [{}] Line {}: ", i, stmt.line_number);
+            
+            switch (stmt.type)
+            {
+                case g10asm::statement_type::label_definition:
+                    std::println("Label '{}'", stmt.label_name);
+                    break;
+                case g10asm::statement_type::instruction:
+                    std::println("Instruction '{}' with {} operand(s)",
+                        stmt.source_token.lexeme, stmt.operands.size());
+                    break;
+                case g10asm::statement_type::directive_org:
+                    std::println(".ORG 0x{:X}", stmt.org_address);
+                    break;
+                case g10asm::statement_type::directive_byte:
+                    std::println(".BYTE with {} value(s)", stmt.data_values.size());
+                    break;
+                case g10asm::statement_type::directive_word:
+                    std::println(".WORD with {} value(s)", stmt.data_values.size());
+                    break;
+                case g10asm::statement_type::directive_dword:
+                    std::println(".DWORD with {} value(s)", stmt.data_values.size());
+                    break;
+                case g10asm::statement_type::directive_global:
+                    std::println(".GLOBAL with {} symbol(s)", stmt.symbol_names.size());
+                    break;
+                case g10asm::statement_type::directive_extern:
+                    std::println(".EXTERN with {} symbol(s)", stmt.symbol_names.size());
+                    break;
+            }
+        }
+    }
 }
 
 /* Main Function **************************************************************/
@@ -186,5 +240,24 @@ auto main (int argc, const char** argv) -> int
         return 0;
     }
 
+    // - Parse the source file.
+    auto& lex = lex_result.value().get();
+    g10asm::parser parse { lex };
+    auto parse_result = parse.parse_program();
+    if (parse_result.has_value() == false)
+    {
+        std::println(stderr, "{}", parse_result.error());
+        return 1;
+    }
+
+    // - If requested, display parse results.
+    if (g10asm::s_parse_only == true)
+    {
+        const auto& prog = parse_result.value().get();
+        g10asm::print_parse_tree(prog);
+        return 0;
+    }
+
+    std::println("Parsing complete. Code generation not yet implemented.");
     return 0;
 }
