@@ -239,11 +239,14 @@ taken to check for and service interrupts:
         cleared.
 4. The CPU then proceeds to service the interrupt:
     - The current value of the `PC` register is pushed onto the stack.
-        - High byte first, followed by the low byte.
+        - In order from highest (most significant) byte to lowest (least significant)
+            byte, each byte of the `PC` is written to the memory address pointed
+            to by the `SP` register, and the `SP` register is decremented
+            accordingly.
     - The `PC` register is then loaded with the starting address of the interrupt
         vector subroutine, calculated as `$1000 + (i * 0x80)`, where `i` is the
         interrupt vector number.
-    - This process consumes five machine cycles: two for a wait state, two for the
+    - This process consumes seven machine cycles: two for a wait state, four for the
         stack push operation, and one for loading the new `PC` value.
 5. After instruction execution completes, if the `IMP` flag is set, the `IME` 
     flag is set, and the `IMP` flag is cleared.
@@ -724,9 +727,9 @@ operations are also provided.
 | `0x6600 SUB D0, IMM32`    | 6         | 9         | `?1???`           | Subtracts immediate `IMM32` from register `D0`.                                                   |
 | `0x670Y SUB D0, DY`       | 2         | 5         | `?1???`           | Subtracts register `DY` from register `D0`.                                                       |
 | `0x6CX0 INC WX`           | 2         | 3         | `?0?--`           | Increments register `WX` by 1.                                                                    |
-| `0x6DX0 INC DY`           | 2         | 5         | `?0?--`           | Increments register `DY` by 1.                                                                    |
+| `0x6DX0 INC DX`           | 2         | 5         | `?0?--`           | Increments register `DX` by 1.                                                                    |
 | `0x6EX0 DEC WX`           | 2         | 3         | `?1?--`           | Decrements register `WX` by 1.                                                                    |
-| `0x6FX0 DEC DY`           | 2         | 5         | `?1?--`           | Decrements register `DY` by 1.                                                                    |
+| `0x6FX0 DEC DX`           | 2         | 5         | `?1?--`           | Decrements register `DX` by 1.                                                                    |
 
 ##### Notes
 

@@ -228,6 +228,50 @@ namespace g10obj
         {
             return static_cast<std::uint32_t>(code.size());
         }
+
+        /**
+         * @brief   Checks to see if this code section has the given flag set.
+         * 
+         * @param   flag    The section flag to check.
+         * 
+         * @return  If the flag is present, returns `true`;
+         *          Otherwise, returns `false`.
+         */
+        inline constexpr auto has_flag (section_flags flag) const noexcept -> bool
+        {
+            return (flags & static_cast<std::uint16_t>(flag)) != 0;
+        }
+
+        /**
+         * @brief   Checks to see if this code section originates in the RAM
+         *          region of the G10's address space.
+         * 
+         * In the G10 architecture, any address with bit 31 set (`$8000_0000`
+         * and above) is considered to be in RAM. The object file specification
+         * specifies that sections with the `SECT_WRITABLE` flag originate in
+         * RAM.
+         * 
+         * The address origination of a code section affects certain behaviors
+         * of the assembler's code generation process:
+         * 
+         * - Instructions can only be emitted in ROM sections. Attempts to emit
+         *   executable code in RAM sections will result in an error. RAM can
+         *   be executable - just copy instruction data there at runtime.
+         * 
+         * - The data definition directives `.BYTE`, `.WORD`, and `.DWORD`
+         *   emit raw data bytes for sections in ROM, but reserve a number of
+         *   uninitialized bytes/words/dwords for sections in RAM. For example,
+         *   `.WORD 0x1234, 0x5678` will emit two words (4 bytes) of data in a
+         *   ROM section, `.WORD 8` will reserve 8 words (16 bytes) of uninitialized
+         *   space in a RAM section.
+         * 
+         * @return  If the section is in RAM, returns `true`;
+         *          Otherwise, returns `false`.
+         */
+        inline constexpr auto is_in_ram () const noexcept -> bool
+        {
+            return has_flag(section_flags::SECT_WRITABLE);
+        }
     };
 
     /**

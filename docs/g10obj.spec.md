@@ -105,6 +105,98 @@ The section table immediately follows the file header. Each section entry is
 | 3 | `SECT_ZERO` | Section is zero-initialized (BSS) |
 | 4-15 | Reserved | Reserved for future use |
 
+### Address Space and Section Types
+
+The G10 architecture divides the 32-bit address space into two regions based
+on bit 31 of the address:
+
+| Region | Address Range | Bit 31 | Description |
+|--------|---------------|--------|-------------|
+| ROM | `$00000000` - `$7FFFFFFF` | Clear (0) | Read-only memory, code and constant data |
+| RAM | `$80000000` - `$FFFFFFFF` | Set (1) | Read-write memory, variables and buffers |
+
+The assembler automatically determines whether a section is in ROM or RAM based
+on its base address (from the `.ORG` directive). Sections with `base_address >= 0x80000000`
+are considered RAM sections and will have the `SECT_WRITABLE` flag set.
+
+#### ROM Sections (Read-Only Memory)
+
+Sections originating in the ROM region (`$00000000` - `$7FFFFFFF`) have the 
+following characteristics:
+
+- **Executable code allowed**: Instructions can be emitted directly
+- **Initialized data**: The `.BYTE`, `.WORD`, and `.DWORD` directives emit 
+  literal data bytes into the section
+- **Flags**: Typically `SECT_EXECUTABLE | SECT_INITIALIZED`
+
+Example ROM section:
+```asm
+.ORG $2000              ; ROM section (bit 31 clear)
+start:
+    LD D0, message      ; Executable code - allowed
+    CALL print_string
+    HALT
+message:
+    .BYTE "Hello", 0    ; Data bytes emitted directly
+```
+
+#### RAM Sections (Read-Write Memory)
+
+Sections originating in the RAM region (`$80000000` - `$FFFFFFFF`) have the 
+following characteristics:
+
+- **Executable code prohibited**: Attempting to emit instructions in a RAM 
+  section will result in an assembler error. If you need executable code in
+  RAM, copy it there at runtime from ROM.
+- **Space reservation**: The `.BYTE`, `.WORD`, and `.DWORD` directives 
+  **reserve** uninitialized space rather than emitting data. The operand
+  specifies the **count** of elements to reserve, not literal values.
+- **Flags**: Typically `SECT_WRITABLE | SECT_ZERO`
+
+Example RAM section:
+```asm
+.ORG $80000000          ; RAM section (bit 31 set)
+buffer:
+    .BYTE 256           ; Reserves 256 bytes (not literal value 256)
+counter:
+    .DWORD 1            ; Reserves 1 dword (4 bytes)
+array:
+    .WORD 16            ; Reserves 16 words (32 bytes)
+```
+
+#### Directive Behavior Summary
+
+| Directive | ROM Section | RAM Section |
+|-----------|-------------|-------------|
+| `.BYTE` | Emits literal byte values | Reserves N bytes |
+| `.WORD` | Emits literal 16-bit values | Reserves N×2 bytes |
+| `.DWORD` | Emits literal 32-bit values | Reserves N×4 bytes |
+| Instructions | Allowed | **Error** |
+
+#### Mixed ROM/RAM Programs
+
+A typical G10 program will have multiple sections spanning both regions:
+
+```asm
+; === ROM Section: Code and Constants ===
+.ORG $2000
+.GLOBAL main
+main:
+    LD D0, initial_value
+    ST D0, [counter]        ; Store to RAM variable
+    JMP main_loop
+
+initial_value:
+    .DWORD $12345678        ; Constant in ROM
+
+; === RAM Section: Variables ===
+.ORG $80000000
+counter:
+    .DWORD 1                ; Reserve 4 bytes for counter
+temp_buffer:
+    .BYTE 64                ; Reserve 64 bytes for buffer
+```
+
 ### Section Ordering
 
 Sections should appear in the section table in order of their base addresses.
@@ -407,7 +499,12 @@ When reading a G10 object file, the following validations should be performed:
 1. Section offsets must not overlap
 2. Section `offset + size` must not exceed `code_size`
 3. Base addresses should be within valid memory ranges
-4. Writable sections should have base address ≥ `0x80000000`
+4. ROM/RAM address consistency:
+   - Sections with `base_address < 0x80000000` (ROM) must NOT have `SECT_WRITABLE` flag
+   - Sections with `base_address >= 0x80000000` (RAM) MUST have `SECT_WRITABLE` flag
+5. ROM sections containing code should have `SECT_EXECUTABLE` flag
+6. RAM sections should have `SECT_ZERO` flag (uninitialized) rather than `SECT_INITIALIZED`
+7. Instructions must not appear in RAM sections (assembler error)
 
 ### Symbol Validation
 
