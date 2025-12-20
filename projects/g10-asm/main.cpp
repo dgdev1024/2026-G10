@@ -10,6 +10,8 @@
 
 #include <g10-asm/lexer.hpp>
 #include <g10-asm/parser.hpp>
+#include <g10-asm/codegen.hpp>
+#include <g10-asm/object_writer.hpp>
 
 /* Private Variables **********************************************************/
 
@@ -21,7 +23,9 @@ namespace g10asm
     static bool s_version = false;
     static bool s_list_tokens = false;
     static bool s_parse_only = false;
+    static bool s_verbose = false;
     static std::string s_source_file = "";
+    static std::string s_output_file = "";
 }
 
 /* Private Functions **********************************************************/
@@ -34,6 +38,8 @@ namespace g10asm
         // `-s <file>`, `--source <file>`:
         //      Required. Specifies the path to the assembly source file to be
         //      assembled.
+        // `-o <file>`, `--output <file>`:
+        //      Required. Specifies the output object file path.
         // `-l`, `--list-tokens`:
         //      If provided, the tool will print the list of tokens extracted
         //      from the provided source file after lexing. Only the tokens from
@@ -41,6 +47,8 @@ namespace g10asm
         // `-p`, `--parse`:
         //      If provided, the tool will parse the source file and print
         //      the parsed AST structure.
+        // `-V`, `--verbose`:
+        //      Enables verbose output during assembly.
         // `-h`, `--help`:
         //      Displays help/usage information.
         // `-v`, `--version`:
@@ -62,6 +70,19 @@ namespace g10asm
                     return false;
                 }
             }
+            else if ((arg == "-o") || (arg == "--output"))
+            {
+                if ((i + 1) < argc)
+                {
+                    s_output_file = argv[i + 1];
+                    ++i;
+                }
+                else
+                {
+                    std::println(stderr, "Error: Missing output file path.");
+                    return false;
+                }
+            }
             else if ((arg == "-l") || (arg == "--list-tokens"))
             {
                 s_list_tokens = true;
@@ -69,6 +90,10 @@ namespace g10asm
             else if ((arg == "-p") || (arg == "--parse"))
             {
                 s_parse_only = true;
+            }
+            else if ((arg == "-V") || (arg == "--verbose"))
+            {
+                s_verbose = true;
             }
             else if ((arg == "-h") || (arg == "--help"))
             {
@@ -92,6 +117,13 @@ namespace g10asm
             return false;
         }
 
+        // Validate `-o` / `--output` argument.
+        if (s_output_file.empty())
+        {
+            std::println(stderr, "Error: No output file specified.");
+            return false;
+        }
+
         return true;
     }
 
@@ -106,8 +138,10 @@ namespace g10asm
         std::println("Usage: g10-asm [options]");
         std::println("Options:");
         std::println("  -s, --source <file>    Required. Specifies the path to the assembly source file to be assembled.");
+        std::println("  -o, --output <file>    Required. Specifies the output object file path.");
         std::println("  -l, --list-tokens      Lists the tokens extracted from the source file after lexing.");
         std::println("  -p, --parse            Parses the source file and displays the AST structure.");
+        std::println("  -V, --verbose          Enables verbose output during assembly.");
         std::println("  -h, --help             Displays this help/usage information.");
         std::println("  -v, --version          Displays version information.\n");
     }
@@ -161,7 +195,7 @@ namespace g10asm
 
     static auto print_parse_tree (const program& prog) -> void
     {
-        std::println("Successfully parsed {} statements.", prog.statements.size());
+        std::println("Statements Parsed: {}.", prog.statements.size());
         std::println("Labels: {}", prog.label_table.size());
         std::println("Global symbols: {}", prog.global_symbols.size());
         std::println("Extern symbols: {}", prog.extern_symbols.size());
@@ -258,6 +292,44 @@ auto main (int argc, const char** argv) -> int
         return 0;
     }
 
-    std::println("Parsing complete. Code generation not yet implemented.");
+    // - Generate code from the parsed program.
+    const auto& prog = parse_result.value().get();
+    g10asm::codegen codegen_instance { prog, g10asm::s_source_file };
+    auto codegen_result = codegen_instance.generate();
+    if (codegen_result.has_value() == false)
+    {
+        std::println(stderr, "Code generation error: {}", codegen_result.error());
+        return 1;
+    }
+
+    const auto& obj_file = codegen_result.value();
+    if (g10asm::s_verbose == true)
+    {
+        std::println("Code generation successful!");
+        std::println("  Sections: {}", obj_file.sections.size());
+        std::println("  Symbols: {}", obj_file.symbols.size());
+        std::println("  Relocations: {}", obj_file.relocations.size());
+        std::println("  Code size: {} bytes", obj_file.total_code_size());
+    }
+
+    // - Write the object file
+    g10asm::object_writer writer { obj_file };
+    auto write_result = writer.write(g10asm::s_output_file);
+    if (!write_result.has_value())
+    {
+        std::println(stderr, "Error writing object file: {}", write_result.error());
+        return 1;
+    }
+
+    // - Display success message with file size
+    if (g10asm::s_verbose == true)
+    {
+        std::println("Wrote object file: {}", g10asm::s_output_file);
+        if (fs::exists(g10asm::s_output_file))
+        {
+            std::println("  File size: {} bytes", fs::file_size(g10asm::s_output_file));
+        }
+    }
+
     return 0;
 }
