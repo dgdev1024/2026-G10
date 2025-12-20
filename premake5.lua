@@ -79,28 +79,4 @@ project "g10"
     objdir "./build/obj/%{cfg.system}-%{cfg.buildcfg}/%{prj.name}"
     files { "./projects/g10/**.hpp", "./projects/g10/**.cpp" }
     includedirs { "./projects" }
-
--- Project: `g10-asm` - G10 CPU Assembler Tool ---------------------------------
-
-project "g10-asm"
-    kind "ConsoleApp"
-
-    location "./build"
-    targetdir "./build/bin/%{cfg.system}-%{cfg.buildcfg}"
-    objdir "./build/obj/%{cfg.system}-%{cfg.buildcfg}/%{prj.name}"
-    files { "./projects/g10-asm/**.hpp", "./projects/g10-asm/**.cpp" }
-    includedirs { "./projects" }
-    links { "g10" }
-
--- Project: `g10-link` - G10 Linker Tool ---------------------------------------
-
-project "g10-link"
-    kind "ConsoleApp"
-
-    location "./build"
-    targetdir "./build/bin/%{cfg.system}-%{cfg.buildcfg}"
-    objdir "./build/obj/%{cfg.system}-%{cfg.buildcfg}/%{prj.name}"
-    files { "./projects/g10-link/**.hpp", "./projects/g10-link/**.cpp" }
-    includedirs { "./projects" }
-    links { "g10" }
     
