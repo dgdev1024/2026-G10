@@ -80,3 +80,15 @@ project "g10"
     files { "./projects/g10/**.hpp", "./projects/g10/**.cpp" }
     includedirs { "./projects" }
     
+-- Project: `g10asm` - G10 Assembler Tool --------------------------------------
+
+project "g10asm"
+    kind "ConsoleApp"
+
+    location "./build"
+    targetdir "./build/bin/%{cfg.system}-%{cfg.buildcfg}"
+    objdir "./build/obj/%{cfg.system}-%{cfg.buildcfg}/%{prj.name}"
+    files { "./projects/g10asm/**.hpp", "./projects/g10asm/**.cpp" }
+    includedirs { "./projects", "./projects/g10" }
+    links { "g10" }
+    

@@ -11,9 +11,18 @@
 
 /* Public Includes ************************************************************/
 
+#include <algorithm>
 #include <expected>
+#include <filesystem>
+#include <fstream>
 #include <format>
+#include <memory>
+#include <print>
 #include <string>
+#include <string_view>
+#include <utility>
+#include <vector>
+#include <cctype>
 #include <cstdint>
 
 /* Public Macros - Library Import/Export **************************************/
@@ -37,6 +46,8 @@
 #endif
 
 /* Public Types ***************************************************************/
+
+namespace fs = std::filesystem;
 
 namespace g10
 {
@@ -70,6 +81,24 @@ namespace g10
      */
     template <typename T, typename U = std::string>
     using result_cref = std::expected<std::reference_wrapper<const T>, U>;
+
+    /**
+     * @brief   Defines a type representing an optional reference to a value
+     *          of type T.
+     * 
+     * @tparam  T   The type of the referenced value.
+     */
+    template <typename T>
+    using optional_ref = std::optional<std::reference_wrapper<T>>;
+
+    /**
+     * @brief   Defines a type representing an optional constant reference
+     *          to a value of type T.
+     * 
+     * @tparam  T   The type of the referenced value.
+     */
+    template <typename T>
+    using optional_cref = std::optional<std::reference_wrapper<const T>>;
 
 }
 

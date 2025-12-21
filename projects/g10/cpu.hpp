@@ -168,9 +168,10 @@ namespace g10
         tog,                        /** @brief `TOG` - Toggle Bit */
 
         // Aliases
+        tcf,                        /** @brief `TCF` - Alias for the `CCF` instruction */
         jp,                         /** @brief `JP` - Alias for all `JMP` instructions */
         jr,                         /** @brief `JR` - Alias for all `JPB` instructions */
-        cpl,                        /** @brief `CPL` - Alias for `NOT L0` instruction */
+        cpl,                        /** @brief `CPL` - Alias for the `NOT L0` instruction */
         cp,                         /** @brief `CP` - Alias for all `CMP` instructions */
     };
 
