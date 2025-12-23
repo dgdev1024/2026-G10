@@ -7,6 +7,8 @@
  *          component.
  */
 
+#pragma once
+
 /* Public Includes ************************************************************/
 
 #include <g10asm/token.hpp>
@@ -48,11 +50,17 @@ namespace g10asm
          * @param   source_file     The path to the source file to be read and
          *                          processed by the lexer.
          * 
-         * @return  If successful, returns a constant reference to the newly
-         *          created and cached lexer instance;
+         * @return  If successful, returns a reference to the newly created and 
+         *          cached lexer instance;
          *          Otherwise, returns an error indicating that an error occurred.
          */
-        static auto from_file (const fs::path& source_file) -> g10::result_cref<lexer>;
+        static auto from_file (const fs::path& source_file) -> g10::result_ref<lexer>;
+
+        /**
+         * @brief   Resets the lexer's current token position to the beginning
+         *          of the token stream.
+         */
+        auto reset_position () -> void;
 
         /**
          * @brief   Peeks ahead (or back) in the token stream by the specified
@@ -77,6 +85,15 @@ namespace g10asm
          * @param   count   The number of tokens to skip. Defaults to `1`.
          */
         auto skip_tokens (const std::size_t count = 1) const -> void;
+
+        /**
+         * @brief   Skips over tokens of the specified type in the token
+         *          stream, advancing the lexer's current token position
+         *          until a token of a different type is encountered.
+         * 
+         * @param   type    The type of tokens to skip.
+         */
+        auto skip_tokens (const token_type type) const -> void;
 
         /**
          * @brief   Consumes and retrieves the current token, advancing the
@@ -205,6 +222,15 @@ namespace g10asm
         inline auto is_good () const -> bool
             { return m_good; }
 
+        /**
+         * @brief   Checks if the lexer has reached the end of the token stream.
+         * 
+         * @return  `true` if the end of the token stream has been reached;
+         *          Otherwise, `false`.
+         */
+        inline auto is_at_end () const -> bool
+            { return m_current_token >= m_tokens.size(); }
+
     private: /* Private Methods ***********************************************/
 
         /**
@@ -247,10 +273,25 @@ namespace g10asm
         auto scan_identifier_or_keyword () -> g10::result<void>;
 
         /**
+         * @brief   Scans a variable token from the source code at the
+         *          current position.
+         * 
+         * Variable tokens begin with a dollar sign (`$`), followed by
+         * letters, digits, or underscores.
+         * 
+         * In the G10 assembly language, variables and constants can be used
+         * to represent values that may change during assembly or execution.
+         * 
+         * @return  If successful, returns `void`;
+         *          Otherwise, returns a string describing the error encountered.
+         */
+        auto scan_variable () -> g10::result<void>; 
+
+        /**
          * @brief   Scans a placeholder token from the source code at the
          *          current position.
          * 
-         * Placeholder tokens begin with a dollar sign (`$`), followed by letters,
+         * Placeholder tokens begin with an "at" symbol (`@`), followed by letters,
          * digits, or underscores.
          * 
          * In the G10 assembly language's macro language, placeholders are used
@@ -393,7 +434,7 @@ namespace g10asm
          *          file, this is the absolute, lexically-normalized path to
          *          that file.
          */
-        fs::path m_source_file { "" };
+        std::string m_source_file { "" };
 
         /**
          * @brief   The source code being processed by this lexer.

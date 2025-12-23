@@ -10,6 +10,7 @@
 
 #include <g10/common.hpp>
 #include <g10asm/lexer.hpp>
+#include <g10asm/parser.hpp>
 
 /* Private Static Variables ***************************************************/
 
@@ -22,6 +23,7 @@ namespace g10asm
     static bool s_version = false;          // `-v`, `--version` - Show version info
     static bool s_verbose = false;          // `--verbose` - Enable verbose output
     static bool s_lex_only = false;         // `--lex-only` - Only perform lexical analysis on this file
+    static bool s_parse_only = false;       // `--parse-only` - Only perform parsing on this file (and included files), and output the AST
 }
 
 /* Private Functions **********************************************************/
@@ -75,6 +77,10 @@ namespace g10asm
             {
                 s_lex_only = true;
             }
+            else if (arg == "--parse-only")
+            {
+                s_parse_only = true;
+            }
             else
             {
                 std::println(stderr, "Error: Unknown argument '{}'.", arg);
@@ -97,7 +103,8 @@ namespace g10asm
         }
         else if (
             s_output_file.empty() == true &&
-            s_lex_only == false
+            s_lex_only == false &&
+            s_parse_only == false
         )
         {
             std::println(stderr, 
@@ -127,6 +134,8 @@ namespace g10asm
             "  -v, --version           Show version information and exit.\n"
             "      --verbose           Enable verbose output during assembly.\n"
             "      --lex-only          Only perform lexical analysis on the source file and display the tokens.\n"
+            "      --parse-only        Only perform parsing on the source file and display the AST.\n"
+            "                          Ignored if '--lex-only' is also specified.\n"
         );
     }
 
@@ -140,6 +149,12 @@ namespace g10asm
             const auto& tok = tokens[i];
             std::println("{:04} | {}", i + 1, tok.to_string());
         }
+    }
+
+    static auto show_ast_output (const ast_module& ast_root) -> void
+    {
+        std::println("AST output for file '{}':", s_source_file);
+        std::println("{}", g10asm::ast_to_string(ast_root));
     }
 }
 
@@ -173,10 +188,27 @@ auto main (int argc, const char** argv) -> int
         return 1;
     }
 
-    const auto& lex = lex_result.value();
+    // - Get the lexer. If `--lex-only` is specified, show the lexer output and
+    //   exit early.
+    auto& lex = lex_result.value().get();
     if (g10asm::s_lex_only == true)
     {
         g10asm::show_lexer_output(lex);
+        return 0;
+    }
+
+    // - Parse the source file into an AST.
+    auto parse_result = g10asm::parser::parse(lex);
+    if (parse_result.has_value() == false)
+    {
+        return 1;
+    }
+    const auto& ast_root = parse_result.value();
+
+    // - If `--parse-only` is specified, show the AST output and exit early.
+    if (g10asm::s_parse_only == true)
+    {
+        g10asm::show_ast_output(ast_root);
         return 0;
     }
 

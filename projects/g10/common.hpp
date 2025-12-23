@@ -21,6 +21,7 @@
 #include <string>
 #include <string_view>
 #include <utility>
+#include <variant>
 #include <vector>
 #include <cctype>
 #include <cstdint>
@@ -51,6 +52,17 @@ namespace fs = std::filesystem;
 
 namespace g10
 {
+
+    /**
+     * @brief   Defines a type representing a reference to a value of type T.
+     * 
+     * @tparam  T   The type of the referenced value.
+     */
+    template <typename T>
+    using ref = std::reference_wrapper<T>;
+
+    template <typename T>
+    using cref = std::reference_wrapper<const T>;
     
     /**
      * @brief   Defines a type representing the result of an operation that
@@ -70,7 +82,7 @@ namespace g10
      * @tparam  T   The type of the successful result value.
      */
     template <typename T, typename U = std::string>
-    using result_ref = std::expected<std::reference_wrapper<T>, U>;
+    using result_ref = std::expected<ref<T>, U>;
 
     /**
      * @brief   Defines a type representing the result of an operation that
@@ -80,7 +92,27 @@ namespace g10
      * @tparam  T   The type of the successful result value.
      */
     template <typename T, typename U = std::string>
-    using result_cref = std::expected<std::reference_wrapper<const T>, U>;
+    using result_cref = std::expected<cref<T>, U>;
+
+    /**
+     * @brief   Defines a type representing the result of an operation that
+     *          can either succeed with a unique pointer to a value of type T
+     *          or fail with an error message.
+     * 
+     * @tparam  T   The type of the successful result value.
+     */
+    template <typename T, typename U = std::string>
+    using result_uptr = std::expected<std::unique_ptr<T>, U>;
+
+    /**
+     * @brief   Defines a type representing the result of an operation that
+     *          can either succeed with a shared pointer to a value of type T
+     *          or fail with an error message.
+     * 
+     * @tparam  T   The type of the successful result value.
+     */
+    template <typename T, typename U = std::string>
+    using result_sptr = std::expected<std::shared_ptr<T>, U>;
 
     /**
      * @brief   Defines a type representing an optional reference to a value
@@ -89,7 +121,7 @@ namespace g10
      * @tparam  T   The type of the referenced value.
      */
     template <typename T>
-    using optional_ref = std::optional<std::reference_wrapper<T>>;
+    using optional_ref = std::optional<ref<T>>;
 
     /**
      * @brief   Defines a type representing an optional constant reference
@@ -98,7 +130,7 @@ namespace g10
      * @tparam  T   The type of the referenced value.
      */
     template <typename T>
-    using optional_cref = std::optional<std::reference_wrapper<const T>>;
+    using optional_cref = std::optional<cref<T>>;
 
 }
 

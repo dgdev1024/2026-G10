@@ -6,6 +6,8 @@
  * @brief   Contains the definition of the assembler's keyword lookup table.
  */
 
+#pragma once
+
 /* Public Includes ************************************************************/
 
 #include <g10/common.hpp>
@@ -52,10 +54,11 @@ namespace g10asm
      */
     struct keyword final
     {
-        std::string_view    name;       /** @brief The keyword's string contents. All keywords are stored in lowercase. */
-        keyword_type        type;       /** @brief The type of keyword (mnemonic, directive, register, etc.). */
-        std::uint8_t        param1;     /** @brief An additional parameter further describing the keyword. */
-        std::uint8_t        param2;     /** @brief An additional parameter further describing the keyword. */
+        std::string_view    name;           /** @brief The keyword's string contents. All keywords are stored in lowercase. */
+        keyword_type        type;           /** @brief The type of keyword (mnemonic, directive, register, etc.). */
+        std::uint8_t        param1 { 0 };   /** @brief An additional parameter further describing the keyword. */
+        std::uint8_t        param2 { 0 };   /** @brief An additional parameter further describing the keyword. */
+        std::uint8_t        param3 { 0 };   /** @brief An additional parameter further describing the keyword. */
     };
 }
 

@@ -18,6 +18,9 @@ namespace g10asm
     const std::vector<keyword> keyword_table::s_keywords =
     {
         // Instruction Mnemonics
+        // - `param1` holds the underlying value of the `g10::instruction` enum.
+        // - `param2` holds the minimum number of operands required.
+        // - `param3` holds the maximum number of operands allowed.
         { "nop", keyword_type::instruction_mnemonic, std::to_underlying(g10::instruction::nop), 0 },
         { "stop", keyword_type::instruction_mnemonic, std::to_underlying(g10::instruction::stop), 0 },
         { "halt", keyword_type::instruction_mnemonic, std::to_underlying(g10::instruction::halt), 0 },
@@ -91,7 +94,7 @@ namespace g10asm
         { ".word", keyword_type::assembler_directive, std::to_underlying(directive_type::word), 0 },
         { ".dword", keyword_type::assembler_directive, std::to_underlying(directive_type::dword), 0 },
         { ".global", keyword_type::assembler_directive, std::to_underlying(directive_type::global), 0 },
-        { ".extern", keyword_type::assembler_directive, std::to_underlying(directive_type::extern_), 0 },
+        { ".extern", keyword_type::assembler_directive, std::to_underlying(directive_type::extern_), 0 },   
 
         // CPU Registers
         { "d0", keyword_type::register_name, std::to_underlying(g10::register_type::d0), 0 },

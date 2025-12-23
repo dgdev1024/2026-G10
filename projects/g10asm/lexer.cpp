@@ -34,7 +34,7 @@ namespace g10asm
     }
 
     auto lexer::from_file (const fs::path& source_file)
-        -> g10::result_cref<lexer>
+        -> g10::result_ref<lexer>
     {
         // - Check if a lexer for this source file already exists.
         fs::path normalized_path = fs::absolute(source_file).lexically_normal();
@@ -42,7 +42,7 @@ namespace g10asm
         {
             if (lex->m_source_file == normalized_path)
             {
-                return std::cref(*lex);
+                return std::ref(*lex);
             }
         }
         
@@ -92,8 +92,13 @@ namespace g10asm
         }
 
         // - Move the lexer into the static cache and return a reference.
-        const auto& emplaced = s_lexers.emplace_back(std::move(lexer_ptr));
-        return std::cref(*emplaced);
+        auto& emplaced = s_lexers.emplace_back(std::move(lexer_ptr));
+        return std::ref(*emplaced);
+    }
+
+    auto lexer::reset_position () -> void
+    {
+        m_current_token = 0;
     }
 
     auto lexer::peek_token (std::int64_t offset) const
@@ -122,6 +127,15 @@ namespace g10asm
         if (m_current_token > m_tokens.size())
         {
             m_current_token = m_tokens.size();
+        }
+    }
+
+    auto lexer::skip_tokens (const token_type type) const -> void
+    {
+        while (m_current_token < m_tokens.size() &&
+               m_tokens[m_current_token].type == type)
+        {
+            ++m_current_token;
         }
     }
 
@@ -178,6 +192,8 @@ namespace g10asm
             if (std::isalpha(ch) || ch == '_' || ch == '.')
                 { scan = scan_identifier_or_keyword(); }
             else if (ch == '$')
+                { scan = scan_variable(); }
+            else if (ch == '@')
                 { scan = scan_placeholder(); }
             else if (std::isdigit(ch))
                 { scan = scan_integer_or_number_literal(); }
@@ -195,7 +211,7 @@ namespace g10asm
                     "Lexical error in '{}:{}:{}':\n - {}",
                     (m_source_file.empty() == true) ?
                         "<input>" :
-                        m_source_file.string(),
+                        m_source_file,
                     m_current_line,
                     m_current_column,
                     scan.error()
@@ -209,7 +225,7 @@ namespace g10asm
         m_tokens.emplace_back(
             token {
                 .type = token_type::end_of_file,
-                .source_file = m_source_file.string(),
+                .source_file = m_source_file,
                 .source_line = m_current_line,
                 .source_column = m_current_column
             }
@@ -233,7 +249,7 @@ namespace g10asm
                     m_tokens.emplace_back(
                         token {
                             .type = token_type::new_line,
-                            .source_file = m_source_file.string(),
+                            .source_file = m_source_file,
                             .source_line = m_current_line,
                             .source_column = m_current_column
                         }
@@ -278,7 +294,7 @@ namespace g10asm
                 m_tokens.emplace_back(
                     token {
                         .type = token_type::new_line,
-                        .source_file = m_source_file.string(),
+                        .source_file = m_source_file,
                         .source_line = m_current_line,
                         .source_column = m_current_column
                     }
@@ -327,7 +343,7 @@ namespace g10asm
                 token {
                     .type = token_type::keyword,
                     .lexeme = lexeme,
-                    .source_file = m_source_file.string(),
+                    .source_file = m_source_file,
                     .source_line = m_current_line,
                     .source_column = start_column,
                     .keyword_value = keyword_result.value()
@@ -341,7 +357,7 @@ namespace g10asm
                 token {
                     .type = token_type::identifier,
                     .lexeme = lexeme,
-                    .source_file = m_source_file.string(),
+                    .source_file = m_source_file,
                     .source_line = m_current_line,
                     .source_column = start_column
                 }
@@ -351,13 +367,58 @@ namespace g10asm
         return {};
     }
 
-    auto lexer::scan_placeholder () -> g10::result<void>
+    auto lexer::scan_variable () -> g10::result<void>
     {
-        // - Get the starting position and column. For placeholders, the `$` is included.
+        // - Get the starting position and column. For variables, the `$` is included.
         std::size_t start_position = m_current_position;
         std::size_t start_column = m_current_column;
 
         // - Advance past the `$`.
+        ++m_current_position;
+        ++m_current_column;
+
+        // - Scan while the current character is valid for variables.
+        while (m_current_position < m_source_code.size())
+        {
+            const char& ch = m_source_code[m_current_position];
+            if (std::isalnum(ch) || ch == '_')
+            {
+                ++m_current_position;
+                ++m_current_column;
+            }
+            else
+            {
+                break;
+            }
+        }
+
+        // - Extract the lexeme.
+        std::string_view lexeme {
+            m_source_code.data() + start_position,
+            m_current_position - start_position
+        };
+
+        // - Emplace the variable token.
+        m_tokens.emplace_back(
+            token {
+                .type = token_type::variable,
+                .lexeme = lexeme,
+                .source_file = m_source_file,
+                .source_line = m_current_line,
+                .source_column = start_column
+            }
+        );
+
+        return {};
+    }
+
+    auto lexer::scan_placeholder () -> g10::result<void>
+    {
+        // - Get the starting position and column. For placeholders, the `@` is included.
+        std::size_t start_position = m_current_position;
+        std::size_t start_column = m_current_column;
+
+        // - Advance past the `@`.
         ++m_current_position;
         ++m_current_column;
 
@@ -391,7 +452,7 @@ namespace g10asm
                 token {
                     .type = token_type::placeholder_keyword,
                     .lexeme = lexeme,
-                    .source_file = m_source_file.string(),
+                    .source_file = m_source_file,
                     .source_line = m_current_line,
                     .source_column = start_column,
                     .keyword_value = keyword_result.value()
@@ -405,7 +466,7 @@ namespace g10asm
                 token {
                     .type = token_type::placeholder,
                     .lexeme = lexeme,
-                    .source_file = m_source_file.string(),
+                    .source_file = m_source_file,
                     .source_line = m_current_line,
                     .source_column = start_column
                 }
@@ -458,7 +519,7 @@ namespace g10asm
             token {
                 .type = token_type::integer_literal,
                 .lexeme = lexeme,
-                .source_file = m_source_file.string(),
+                .source_file = m_source_file,
                 .source_line = m_current_line,
                 .source_column = start_column
             }
@@ -520,7 +581,7 @@ namespace g10asm
             token {
                 .type = token_type::integer_literal,
                 .lexeme = lexeme,
-                .source_file = m_source_file.string(),
+                .source_file = m_source_file,
                 .source_line = m_current_line,
                 .source_column = start_column
             }
@@ -582,7 +643,7 @@ namespace g10asm
             token {
                 .type = token_type::integer_literal,
                 .lexeme = lexeme,
-                .source_file = m_source_file.string(),
+                .source_file = m_source_file,
                 .source_line = m_current_line,
                 .source_column = start_column
             }
@@ -663,7 +724,7 @@ namespace g10asm
                     token_type::number_literal :
                     token_type::integer_literal,
                 .lexeme = lexeme,
-                .source_file = m_source_file.string(),
+                .source_file = m_source_file,
                 .source_line = m_current_line,
                 .source_column = start_column
             }
@@ -793,7 +854,7 @@ namespace g10asm
             token {
                 .type = token_type::character_literal,
                 .lexeme = lexeme,
-                .source_file = m_source_file.string(),
+                .source_file = m_source_file,
                 .source_line = m_current_line,
                 .source_column = start_column
             }
@@ -851,7 +912,7 @@ namespace g10asm
             token {
                 .type = token_type::string_literal,
                 .lexeme = lexeme,
-                .source_file = m_source_file.string(),
+                .source_file = m_source_file,
                 .source_line = m_current_line,
                 .source_column = start_column
             }
@@ -875,7 +936,7 @@ namespace g10asm
                 m_tokens.emplace_back( \
                     token { \
                         .type = sym, \
-                        .source_file = m_source_file.string(), \
+                        .source_file = m_source_file, \
                         .source_line = m_current_line, \
                         .source_column = m_current_column \
                     } \

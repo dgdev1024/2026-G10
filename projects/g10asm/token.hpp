@@ -6,6 +6,8 @@
  * @brief   Contains definitions for the G10 assembler lexer's token structure.
  */
 
+#pragma once
+
 /* Public Includes ************************************************************/
 
 #include <g10asm/keyword_table.hpp>
@@ -25,6 +27,7 @@ namespace g10asm
         // Keywords and Identifiers
         keyword,                            /** @brief A recognized keyword (mnemonic, directive, register, etc.). */
         identifier,                         /** @brief A user-defined identifier (label, variable name, etc.). */
+        variable,                           /** @brief A variable or constant token used during parsing (an identifier starting with a `$`). */
         placeholder,                        /** @brief A placeholder token used during parsing; an integer or identifier starting with a `$`. */
         placeholder_keyword,                /** @brief Certain placeholders can be reserved keywords, too. */
 
@@ -136,6 +139,7 @@ namespace g10asm
             switch (type)
             {
                 case token_type::identifier:              return "identifier";
+                case token_type::variable:                return "variable";
                 case token_type::placeholder:             return "placeholder";
                 case token_type::integer_literal:         return "integer_literal";
                 case token_type::number_literal:          return "number_literal";
