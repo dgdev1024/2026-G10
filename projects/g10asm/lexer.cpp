@@ -16,6 +16,7 @@
 namespace g10asm
 {
     std::vector<std::unique_ptr<lexer>> lexer::s_lexers;
+    std::size_t lexer::s_maximum_lexer_count = 32;
 }
 
 /* Public Methods *************************************************************/
@@ -33,6 +34,18 @@ namespace g10asm
         tokenize();
     }
 
+    auto lexer::reserve_lexers (const std::size_t count) -> void
+    {
+        // - Cannot be called if lexers have already been reserved.
+        if (s_lexers.capacity() > 0)
+        {
+            return;
+        }
+
+        s_maximum_lexer_count = std::max(s_maximum_lexer_count, count);
+        s_lexers.reserve(s_maximum_lexer_count + 2); // Extra buffer to ensure no reallocations
+    }
+
     auto lexer::from_file (const fs::path& source_file)
         -> g10::result_ref<lexer>
     {
@@ -44,6 +57,17 @@ namespace g10asm
             {
                 return std::ref(*lex);
             }
+        }
+
+        // - Make sure we have not exceeded the maximum number of lexers.
+        if (s_lexers.size() >= s_maximum_lexer_count)
+        {
+            return g10::error(
+                "Exceeded maximum number of cached lexers ({}).\n"
+                " - You have too many source files being included in this assembly module.\n"
+                " - Use `-l <count>` or `--lexers <count>` to increase the limit.",
+                s_maximum_lexer_count
+            );
         }
         
         // - Make sure that the path exists, and refers to a regular file.

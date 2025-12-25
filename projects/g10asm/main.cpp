@@ -22,6 +22,7 @@ namespace g10asm
     static bool s_help = false;             // `-h`, `--help` - Show help message
     static bool s_version = false;          // `-v`, `--version` - Show version info
     static bool s_verbose = false;          // `--verbose` - Enable verbose output
+    static std::size_t s_lexer_count = 32;  // `-l <count>`, `--lexers <count>` - Number of lexers to reserve. Minimum 32.
     static bool s_lex_only = false;         // `--lex-only` - Only perform lexical analysis on this file
     static bool s_parse_only = false;       // `--parse-only` - Only perform parsing on this file (and included files), and output the AST
 }
@@ -72,6 +73,28 @@ namespace g10asm
             else if (arg == "--verbose")
             {
                 s_verbose = true;
+            }
+            else if (arg == "-l" || arg == "--lexers")
+            {
+                if (i + 1 < argc)
+                {
+                    try
+                    {
+                        s_lexer_count = std::stoul(argv[++i]);
+                        s_lexer_count = std::max(s_lexer_count, static_cast<std::size_t>(32));
+                    }
+                    catch (const std::exception&)
+                    {
+                        std::println(stderr, "Error: Invalid lexer count '{}' after '{}'.",
+                            argv[i], arg);
+                        return false;
+                    }
+                }
+                else
+                {
+                    std::println(stderr, "Error: Missing lexer count after '{}'.", arg);
+                    return false;
+                }
             }
             else if (arg == "--lex-only")
             {
@@ -133,6 +156,7 @@ namespace g10asm
             "  -h, --help              Show this help message and exit.\n"
             "  -v, --version           Show version information and exit.\n"
             "      --verbose           Enable verbose output during assembly.\n"
+            "  -l, --lexers <count>    Specify the number of lexers to reserve (minimum 32).\n"
             "      --lex-only          Only perform lexical analysis on the source file and display the tokens.\n"
             "      --parse-only        Only perform parsing on the source file and display the AST.\n"
             "                          Ignored if '--lex-only' is also specified.\n"
@@ -181,6 +205,9 @@ auto main (int argc, const char** argv) -> int
         return 0;
     }
 
+    // - Reserve lexers as specified.
+    g10asm::lexer::reserve_lexers(g10asm::s_lexer_count);
+
     // - Create a lexer for the source file.
     auto lex_result = g10asm::lexer::from_file(g10asm::s_source_file);
     if (lex_result.has_value() == false)
@@ -203,7 +230,7 @@ auto main (int argc, const char** argv) -> int
     {
         return 1;
     }
-    const auto& ast_root = parse_result.value();
+    auto& ast_root = parse_result.value();
 
     // - If `--parse-only` is specified, show the AST output and exit early.
     if (g10asm::s_parse_only == true)

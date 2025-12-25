@@ -44,6 +44,14 @@ namespace g10asm
             const fs::path& source_file = "");
 
         /**
+         * @brief   This static method reserves space for the specified number
+         *          of lexer instances in the static lexer cache.
+         *
+         * @param   count   The number of lexer instances to reserve space for.
+         */
+        static auto reserve_lexers (const std::size_t count) -> void;
+
+        /**
          * @brief   This factory method creates a new lexer instance by reading
          *          the source code from the specified file.
          * 
@@ -428,6 +436,20 @@ namespace g10asm
         static std::vector<
             std::unique_ptr<lexer>
         > s_lexers;
+
+        /**
+         * @brief   The maximum number of lexer instances that can be created
+         *          and cached.
+         * 
+         * The G10 assembler tool makes heavy use of `std::string_view` to
+         * reference substrings within the source code being processed, as well
+         * as the extracted tokens' lexemes. To ensure that these string views
+         * remain valid, the `s_lexers` vector needs to have a guranteed maximum
+         * capacity reserved, so that reallocation cannot occur, rendering these
+         * string views invalid and causing undefined behavior and segmentation 
+         * faults.
+         */
+        static std::size_t s_maximum_lexer_count;
 
         /**
          * @file    If the source code processed by this lexer was read from a

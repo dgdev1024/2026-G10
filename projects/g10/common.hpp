@@ -20,10 +20,13 @@
 #include <print>
 #include <string>
 #include <string_view>
+#include <unordered_map>
+#include <unordered_set>
 #include <utility>
 #include <variant>
 #include <vector>
 #include <cctype>
+#include <cmath>
 #include <cstdint>
 
 /* Public Macros - Library Import/Export **************************************/
