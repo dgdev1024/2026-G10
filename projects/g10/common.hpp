@@ -18,6 +18,7 @@
 #include <format>
 #include <memory>
 #include <print>
+#include <span>
 #include <string>
 #include <string_view>
 #include <unordered_map>
@@ -28,6 +29,7 @@
 #include <cctype>
 #include <cmath>
 #include <cstdint>
+#include <cstring>
 
 /* Public Macros - Library Import/Export **************************************/
 
@@ -48,6 +50,18 @@
         #endif
     #endif
 #endif
+
+/* Public Macros **************************************************************/
+
+#define G10_BIT_ENUM(ec) \
+    inline constexpr auto operator| (ec a, ec b) noexcept -> ec \
+        { return static_cast<ec>( \
+            std::to_underlying(a) | std::to_underlying(b)); } \
+    inline constexpr auto operator& (ec a, ec b) noexcept -> ec \
+        { return static_cast<ec>( \
+            std::to_underlying(a) & std::to_underlying(b)); } \
+    inline constexpr auto operator~ (ec a) noexcept -> ec \
+        { return static_cast<ec>(~std::to_underlying(a)); }
 
 /* Public Types ***************************************************************/
 
