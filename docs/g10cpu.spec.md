@@ -1,17 +1,24 @@
 # Specification: G10 CPU
 
-Below is a specification for a custom CPU architecture, named "G10". This
-document outlines the architecture's features, instruction set, and operational
-details.
+Below is a specification for a custom, virtual CPU architecture, named the "G10".
+This document outlines the architecture's features, instruction set, and 
+operational details.
 
 ## Overview
 
 The G10 CPU is a CISC architecture designed for educational purposes, featuring
 a straightforward, fixed-length instruction set and a simple memory model, and
 drawing inspiration from classic 8-bit CPU designs (namely, those of the Intel
-8080, Zilog Z80, and the Nintendo Game Boy's Sharp LR35902). Effectively, this
-is basically those architectures reimagined with 32-bit registers and a 32-bit
-address space.
+8080, Zilog Z80, MOS 6502, and the Nintendo Game Boy's Sharp LR35902). Effectively, 
+this is basically those architectures reimagined with 32-bit registers and a 
+32-bit address space.
+
+The G10 CPU is intended to be a virtual CPU architecture, meaning that it is
+designed to be implemented in software, rather than as a physical hardware
+component. This allows for greater flexibility and ease of use, as well as
+simplifying the process of development and testing. If you (the reader) are
+interested in implementing the G10 CPU in hardware, however, feel absolutely free
+to do so!
 
 ### Details
 
@@ -20,7 +27,17 @@ address space.
 - **Address Bus**: 32 bits
     - Supports up to 4 GB of addressable memory
 - **Endianness**: Little-endian
-- **Clock Speed**: 4.194304 MHz (normal speed), 8.388608 MHz (double speed)
+- **Clock Speed**: Adjustable (by the virtual machine hardware)
+    - Some examples of common clock speeds include the following:
+        - *Nintendo Game Boy (Color)*: 4.194304 MHz / 8.388608 MHz (double speed)
+        - *Intel 8080 (Standard)*: 2 MHz
+        - *Zilog Z80 (Original)*: 2.5 MHz
+        - *MOS 6502 (Standard)*: 1 MHz
+        - *Ricoh 2A03 (Nintendo Entertainment System)*: 1.79 MHz
+    - The G10 CPU also supports a "double speed" mode, which can be toggled
+        by the virtual machine hardware as needed for performance or power.
+        For example, just double the above-listed clock speeds when in double
+        speed mode.
 - **Instruction Set Architecture (ISA)**: CISC (Complex Instruction Set Computer)
 - **Instruction Opcode Length**: 16 bits (2 bytes)
 

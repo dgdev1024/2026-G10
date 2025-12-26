@@ -464,7 +464,8 @@ namespace g10
          *          speed mode.
          * 
          * In double speed mode, the CPU operates at twice the normal clock
-         * speed of ~4.19 MHz, effectively running at ~8.38 MHz.
+         * speed. Actual clock speeds depend on the virtual machine's hardware
+         * requirements and configuration.
          * 
          * @return  `true` if the CPU is in double speed mode; 
          *          Otherwise, `false`.
