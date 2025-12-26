@@ -5,8 +5,8 @@
 
 .org 0x1000
 test_conditions:
-    ld d0, 0
-    cmp d0, 1
+    ld l0, 0
+    cmp l0, 1
     jpb nc, label_nc
     jpb zs, label_zs
     jpb zc, label_zc

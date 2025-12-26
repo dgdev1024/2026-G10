@@ -1151,12 +1151,497 @@ namespace g10asm
 
 namespace g10asm
 {
+    /**
+     * @brief   Entry point for expression parsing.
+     * 
+     * This method delegates to the lowest-precedence binary operator parser,
+     * which chains upward through the precedence hierarchy. The precedence
+     * order (lowest to highest) is:
+     * 
+     *   1. Bitwise OR (`|`)
+     *   2. Bitwise XOR (`^`)
+     *   3. Bitwise AND (`&`)
+     *   4. Shift (`<<`, `>>`)
+     *   5. Additive (`+`, `-`)
+     *   6. Multiplicative (`*`, `/`, `%`)
+     *   7. Exponentiation (`**`) - right-associative
+     *   8. Unary (`-`, `~`, `!`)
+     *   9. Primary (literals, identifiers, grouped expressions)
+     */
     auto parser::parse_expression (lexer& lex) 
         -> g10::result_uptr<ast_expression>
     {
+        return parse_bitwise_or_expression(lex);
+    }
+
+    /**
+     * @brief   Parses bitwise OR expressions (`|`).
+     * 
+     * This is the lowest-precedence binary operator. The grammar is:
+     *   bitwise_or_expr := bitwise_xor_expr ( '|' bitwise_xor_expr )*
+     * 
+     * Left-associative: `a | b | c` parses as `(a | b) | c`.
+     */
+    auto parser::parse_bitwise_or_expression (lexer& lex)
+        -> g10::result_uptr<ast_expression>
+    {
+        // - Parse the left operand (higher precedence expression).
+        auto left_result = parse_bitwise_xor_expression(lex);
+        if (left_result.has_value() == false)
+        {
+            return g10::error(left_result.error());
+        }
+
+        auto left = std::move(left_result.value());
+
+        // - While we see a bitwise OR operator, consume it and parse the
+        //   right operand, building a left-associative binary expression tree.
+        while (true)
+        {
+            auto peek_result = lex.peek_token(0);
+            if (peek_result.has_value() == false)
+            {
+                break;
+            }
+
+            const token& op_tk = peek_result.value();
+            if (op_tk.type != token_type::bitwise_or)
+            {
+                break;
+            }
+
+            // - Consume the operator token.
+            lex.skip_tokens(1);
+
+            // - Parse the right operand.
+            auto right_result = parse_bitwise_xor_expression(lex);
+            if (right_result.has_value() == false)
+            {
+                return g10::error(right_result.error());
+            }
+
+            // - Create the binary expression node.
+            auto binary_node = std::make_unique<ast_expr_binary>(op_tk);
+            binary_node->operator_type = op_tk.type;
+            binary_node->left_operand = std::move(left);
+            binary_node->right_operand = std::move(right_result.value());
+
+            // - The new binary node becomes the left operand for the next
+            //   iteration (left-associativity).
+            left = std::move(binary_node);
+        }
+
+        return left;
+    }
+
+    /**
+     * @brief   Parses bitwise XOR expressions (`^`).
+     * 
+     * Higher precedence than bitwise OR. The grammar is:
+     *   bitwise_xor_expr := bitwise_and_expr ( '^' bitwise_and_expr )*
+     * 
+     * Left-associative: `a ^ b ^ c` parses as `(a ^ b) ^ c`.
+     */
+    auto parser::parse_bitwise_xor_expression (lexer& lex)
+        -> g10::result_uptr<ast_expression>
+    {
+        // - Parse the left operand (higher precedence expression).
+        auto left_result = parse_bitwise_and_expression(lex);
+        if (left_result.has_value() == false)
+        {
+            return g10::error(left_result.error());
+        }
+
+        auto left = std::move(left_result.value());
+
+        // - While we see a bitwise XOR operator, consume it and parse the
+        //   right operand.
+        while (true)
+        {
+            auto peek_result = lex.peek_token(0);
+            if (peek_result.has_value() == false)
+            {
+                break;
+            }
+
+            const token& op_tk = peek_result.value();
+            if (op_tk.type != token_type::bitwise_xor)
+            {
+                break;
+            }
+
+            // - Consume the operator token.
+            lex.skip_tokens(1);
+
+            // - Parse the right operand.
+            auto right_result = parse_bitwise_and_expression(lex);
+            if (right_result.has_value() == false)
+            {
+                return g10::error(right_result.error());
+            }
+
+            // - Create the binary expression node.
+            auto binary_node = std::make_unique<ast_expr_binary>(op_tk);
+            binary_node->operator_type = op_tk.type;
+            binary_node->left_operand = std::move(left);
+            binary_node->right_operand = std::move(right_result.value());
+
+            left = std::move(binary_node);
+        }
+
+        return left;
+    }
+
+    /**
+     * @brief   Parses bitwise AND expressions (`&`).
+     * 
+     * Higher precedence than bitwise XOR. The grammar is:
+     *   bitwise_and_expr := shift_expr ( '&' shift_expr )*
+     * 
+     * Left-associative: `a & b & c` parses as `(a & b) & c`.
+     */
+    auto parser::parse_bitwise_and_expression (lexer& lex)
+        -> g10::result_uptr<ast_expression>
+    {
+        // - Parse the left operand (higher precedence expression).
+        auto left_result = parse_shift_expression(lex);
+        if (left_result.has_value() == false)
+        {
+            return g10::error(left_result.error());
+        }
+
+        auto left = std::move(left_result.value());
+
+        // - While we see a bitwise AND operator, consume it and parse the
+        //   right operand.
+        while (true)
+        {
+            auto peek_result = lex.peek_token(0);
+            if (peek_result.has_value() == false)
+            {
+                break;
+            }
+
+            const token& op_tk = peek_result.value();
+            if (op_tk.type != token_type::bitwise_and)
+            {
+                break;
+            }
+
+            // - Consume the operator token.
+            lex.skip_tokens(1);
+
+            // - Parse the right operand.
+            auto right_result = parse_shift_expression(lex);
+            if (right_result.has_value() == false)
+            {
+                return g10::error(right_result.error());
+            }
+
+            // - Create the binary expression node.
+            auto binary_node = std::make_unique<ast_expr_binary>(op_tk);
+            binary_node->operator_type = op_tk.type;
+            binary_node->left_operand = std::move(left);
+            binary_node->right_operand = std::move(right_result.value());
+
+            left = std::move(binary_node);
+        }
+
+        return left;
+    }
+
+    /**
+     * @brief   Parses shift expressions (`<<`, `>>`).
+     * 
+     * Higher precedence than bitwise AND. The grammar is:
+     *   shift_expr := additive_expr ( ('<<' | '>>') additive_expr )*
+     * 
+     * Left-associative: `a << b >> c` parses as `(a << b) >> c`.
+     */
+    auto parser::parse_shift_expression (lexer& lex)
+        -> g10::result_uptr<ast_expression>
+    {
+        // - Parse the left operand (higher precedence expression).
+        auto left_result = parse_additive_expression(lex);
+        if (left_result.has_value() == false)
+        {
+            return g10::error(left_result.error());
+        }
+
+        auto left = std::move(left_result.value());
+
+        // - While we see a shift operator, consume it and parse the
+        //   right operand.
+        while (true)
+        {
+            auto peek_result = lex.peek_token(0);
+            if (peek_result.has_value() == false)
+            {
+                break;
+            }
+
+            const token& op_tk = peek_result.value();
+            if (op_tk.type != token_type::bitwise_shift_left &&
+                op_tk.type != token_type::bitwise_shift_right)
+            {
+                break;
+            }
+
+            // - Consume the operator token.
+            lex.skip_tokens(1);
+
+            // - Parse the right operand.
+            auto right_result = parse_additive_expression(lex);
+            if (right_result.has_value() == false)
+            {
+                return g10::error(right_result.error());
+            }
+
+            // - Create the binary expression node.
+            auto binary_node = std::make_unique<ast_expr_binary>(op_tk);
+            binary_node->operator_type = op_tk.type;
+            binary_node->left_operand = std::move(left);
+            binary_node->right_operand = std::move(right_result.value());
+
+            left = std::move(binary_node);
+        }
+
+        return left;
+    }
+
+    /**
+     * @brief   Parses additive expressions (`+`, `-`).
+     * 
+     * Higher precedence than shift operators. The grammar is:
+     *   additive_expr := multiplicative_expr ( ('+' | '-') multiplicative_expr )*
+     * 
+     * Left-associative: `a + b - c` parses as `(a + b) - c`.
+     */
+    auto parser::parse_additive_expression (lexer& lex)
+        -> g10::result_uptr<ast_expression>
+    {
+        // - Parse the left operand (higher precedence expression).
+        auto left_result = parse_multiplicative_expression(lex);
+        if (left_result.has_value() == false)
+        {
+            return g10::error(left_result.error());
+        }
+
+        auto left = std::move(left_result.value());
+
+        // - While we see an additive operator, consume it and parse the
+        //   right operand.
+        while (true)
+        {
+            auto peek_result = lex.peek_token(0);
+            if (peek_result.has_value() == false)
+            {
+                break;
+            }
+
+            const token& op_tk = peek_result.value();
+            if (op_tk.type != token_type::plus &&
+                op_tk.type != token_type::minus)
+            {
+                break;
+            }
+
+            // - Consume the operator token.
+            lex.skip_tokens(1);
+
+            // - Parse the right operand.
+            auto right_result = parse_multiplicative_expression(lex);
+            if (right_result.has_value() == false)
+            {
+                return g10::error(right_result.error());
+            }
+
+            // - Create the binary expression node.
+            auto binary_node = std::make_unique<ast_expr_binary>(op_tk);
+            binary_node->operator_type = op_tk.type;
+            binary_node->left_operand = std::move(left);
+            binary_node->right_operand = std::move(right_result.value());
+
+            left = std::move(binary_node);
+        }
+
+        return left;
+    }
+
+    /**
+     * @brief   Parses multiplicative expressions (`*`, `/`, `%`).
+     * 
+     * Higher precedence than additive operators. The grammar is:
+     *   multiplicative_expr := exponent_expr ( ('*' | '/' | '%') exponent_expr )*
+     * 
+     * Left-associative: `a * b / c` parses as `(a * b) / c`.
+     */
+    auto parser::parse_multiplicative_expression (lexer& lex)
+        -> g10::result_uptr<ast_expression>
+    {
+        // - Parse the left operand (higher precedence expression).
+        auto left_result = parse_exponent_expression(lex);
+        if (left_result.has_value() == false)
+        {
+            return g10::error(left_result.error());
+        }
+
+        auto left = std::move(left_result.value());
+
+        // - While we see a multiplicative operator, consume it and parse the
+        //   right operand.
+        while (true)
+        {
+            auto peek_result = lex.peek_token(0);
+            if (peek_result.has_value() == false)
+            {
+                break;
+            }
+
+            const token& op_tk = peek_result.value();
+            if (op_tk.type != token_type::times &&
+                op_tk.type != token_type::divide &&
+                op_tk.type != token_type::modulo)
+            {
+                break;
+            }
+
+            // - Consume the operator token.
+            lex.skip_tokens(1);
+
+            // - Parse the right operand.
+            auto right_result = parse_exponent_expression(lex);
+            if (right_result.has_value() == false)
+            {
+                return g10::error(right_result.error());
+            }
+
+            // - Create the binary expression node.
+            auto binary_node = std::make_unique<ast_expr_binary>(op_tk);
+            binary_node->operator_type = op_tk.type;
+            binary_node->left_operand = std::move(left);
+            binary_node->right_operand = std::move(right_result.value());
+
+            left = std::move(binary_node);
+        }
+
+        return left;
+    }
+
+    /**
+     * @brief   Parses exponentiation expressions (`**`).
+     * 
+     * Higher precedence than multiplicative operators. The grammar is:
+     *   exponent_expr := unary_expr ( '**' exponent_expr )?
+     * 
+     * Right-associative: `2 ** 3 ** 4` parses as `2 ** (3 ** 4)`.
+     * This is achieved by recursively calling parse_exponent_expression
+     * for the right operand instead of a higher-precedence parser.
+     */
+    auto parser::parse_exponent_expression (lexer& lex)
+        -> g10::result_uptr<ast_expression>
+    {
+        // - Parse the base (left operand) as a unary expression.
+        auto base_result = parse_unary_expression(lex);
+        if (base_result.has_value() == false)
+        {
+            return g10::error(base_result.error());
+        }
+
+        // - Check if the next token is an exponentiation operator.
+        auto peek_result = lex.peek_token(0);
+        if (peek_result.has_value() == false)
+        {
+            return base_result;
+        }
+
+        const token& op_tk = peek_result.value();
+        if (op_tk.type != token_type::exponent)
+        {
+            return base_result;
+        }
+
+        // - Consume the exponentiation operator.
+        lex.skip_tokens(1);
+
+        // - Recursively parse the exponent (right operand) as another
+        //   exponent expression to achieve right-associativity.
+        auto exponent_result = parse_exponent_expression(lex);
+        if (exponent_result.has_value() == false)
+        {
+            return g10::error(exponent_result.error());
+        }
+
+        // - Create the binary expression node.
+        auto binary_node = std::make_unique<ast_expr_binary>(op_tk);
+        binary_node->operator_type = op_tk.type;
+        binary_node->left_operand = std::move(base_result.value());
+        binary_node->right_operand = std::move(exponent_result.value());
+
+        return binary_node;
+    }
+
+    /**
+     * @brief   Parses unary expressions (`-`, `~`, `!`).
+     * 
+     * Unary operators have the highest precedence among operators. The grammar is:
+     *   unary_expr := ('-' | '~' | '!') unary_expr | primary_expr
+     * 
+     * Unary expressions can be nested: `--x` parses as `-(-x)`.
+     * 
+     * Supported unary operators:
+     * - `-` : Arithmetic negation (e.g., `-5`, `-label`)
+     * - `~` : Bitwise NOT/complement (e.g., `~0xFF`, `~mask`)
+     * - `!` : Logical NOT (e.g., `!flag`)
+     */
+    auto parser::parse_unary_expression (lexer& lex)
+        -> g10::result_uptr<ast_expression>
+    {
+        // - Peek at the current token to check for unary operators.
+        auto peek_result = lex.peek_token(0);
+        if (peek_result.has_value() == false)
+        {
+            return g10::error(peek_result.error());
+        }
+
+        const token& op_tk = peek_result.value();
+
+        // - Check if this is a unary operator.
+        if (op_tk.type == token_type::minus ||
+            op_tk.type == token_type::bitwise_not ||
+            op_tk.type == token_type::logical_not)
+        {
+            // - Consume the unary operator token.
+            lex.skip_tokens(1);
+
+            // - Recursively parse the operand as another unary expression.
+            //   This allows for nested unary operators like `--x` or `~~y`.
+            auto operand_result = parse_unary_expression(lex);
+            if (operand_result.has_value() == false)
+            {
+                return g10::error(operand_result.error());
+            }
+
+            // - Create the unary expression node.
+            auto unary_node = std::make_unique<ast_expr_unary>(op_tk);
+            unary_node->operator_type = op_tk.type;
+            unary_node->operand = std::move(operand_result.value());
+
+            return unary_node;
+        }
+
+        // - If no unary operator is found, parse a primary expression.
         return parse_primary_expression(lex);
     }
 
+    /**
+     * @brief   Parses primary expressions (literals, identifiers, grouped).
+     * 
+     * Primary expressions are the atomic building blocks of all expressions.
+     * The grammar is:
+     *   primary_expr := INTEGER | NUMBER | CHAR | STRING | IDENTIFIER |
+     *                   VARIABLE | PLACEHOLDER | '(' expression ')'
+     */
     auto parser::parse_primary_expression (lexer& lex) 
         -> g10::result_uptr<ast_expression>
     {

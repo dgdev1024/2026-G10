@@ -296,6 +296,12 @@ namespace g10asm
          * @brief   Parses a single G10 assembly expression from the token
          *          stream provided by the given lexer.
          * 
+         * This method serves as the entry point for expression parsing and
+         * delegates to the lowest-precedence binary expression parser
+         * (`parse_bitwise_or_expression`), which in turn chains to
+         * higher-precedence parsers, ultimately reaching unary and primary
+         * expression parsing.
+         * 
          * @param   lex     The lexer instance providing the sequence of tokens
          *                  to be parsed.
          * 
@@ -308,8 +314,146 @@ namespace g10asm
             -> g10::result_uptr<ast_expression>;
 
         /**
+         * @brief   Parses a bitwise OR expression (`|`) from the token stream.
+         * 
+         * This is the lowest-precedence binary operator. It parses left-to-right,
+         * building a left-associative tree of `ast_expr_binary` nodes.
+         * 
+         * @param   lex     The lexer instance providing the sequence of tokens
+         *                  to be parsed.
+         * 
+         * @return  If successful, returns a unique pointer to the AST node
+         *          representing the parsed expression;
+         *          Otherwise, returns an error.
+         */
+        static auto parse_bitwise_or_expression (lexer& lex)
+            -> g10::result_uptr<ast_expression>;
+
+        /**
+         * @brief   Parses a bitwise XOR expression (`^`) from the token stream.
+         * 
+         * Higher precedence than bitwise OR. Parses left-to-right.
+         * 
+         * @param   lex     The lexer instance providing the sequence of tokens
+         *                  to be parsed.
+         * 
+         * @return  If successful, returns a unique pointer to the AST node
+         *          representing the parsed expression;
+         *          Otherwise, returns an error.
+         */
+        static auto parse_bitwise_xor_expression (lexer& lex)
+            -> g10::result_uptr<ast_expression>;
+
+        /**
+         * @brief   Parses a bitwise AND expression (`&`) from the token stream.
+         * 
+         * Higher precedence than bitwise XOR. Parses left-to-right.
+         * 
+         * @param   lex     The lexer instance providing the sequence of tokens
+         *                  to be parsed.
+         * 
+         * @return  If successful, returns a unique pointer to the AST node
+         *          representing the parsed expression;
+         *          Otherwise, returns an error.
+         */
+        static auto parse_bitwise_and_expression (lexer& lex)
+            -> g10::result_uptr<ast_expression>;
+
+        /**
+         * @brief   Parses a shift expression (`<<`, `>>`) from the token stream.
+         * 
+         * Higher precedence than bitwise AND. Parses left-to-right.
+         * 
+         * @param   lex     The lexer instance providing the sequence of tokens
+         *                  to be parsed.
+         * 
+         * @return  If successful, returns a unique pointer to the AST node
+         *          representing the parsed expression;
+         *          Otherwise, returns an error.
+         */
+        static auto parse_shift_expression (lexer& lex)
+            -> g10::result_uptr<ast_expression>;
+
+        /**
+         * @brief   Parses an additive expression (`+`, `-`) from the token stream.
+         * 
+         * Higher precedence than shift operators. Parses left-to-right.
+         * 
+         * @param   lex     The lexer instance providing the sequence of tokens
+         *                  to be parsed.
+         * 
+         * @return  If successful, returns a unique pointer to the AST node
+         *          representing the parsed expression;
+         *          Otherwise, returns an error.
+         */
+        static auto parse_additive_expression (lexer& lex)
+            -> g10::result_uptr<ast_expression>;
+
+        /**
+         * @brief   Parses a multiplicative expression (`*`, `/`, `%`) from the
+         *          token stream.
+         * 
+         * Higher precedence than additive operators. Parses left-to-right.
+         * 
+         * @param   lex     The lexer instance providing the sequence of tokens
+         *                  to be parsed.
+         * 
+         * @return  If successful, returns a unique pointer to the AST node
+         *          representing the parsed expression;
+         *          Otherwise, returns an error.
+         */
+        static auto parse_multiplicative_expression (lexer& lex)
+            -> g10::result_uptr<ast_expression>;
+
+        /**
+         * @brief   Parses an exponentiation expression (`**`) from the token
+         *          stream.
+         * 
+         * Higher precedence than multiplicative operators. Unlike other binary
+         * operators, exponentiation is right-associative (e.g., `2 ** 3 ** 4`
+         * is parsed as `2 ** (3 ** 4)`).
+         * 
+         * @param   lex     The lexer instance providing the sequence of tokens
+         *                  to be parsed.
+         * 
+         * @return  If successful, returns a unique pointer to the AST node
+         *          representing the parsed expression;
+         *          Otherwise, returns an error.
+         */
+        static auto parse_exponent_expression (lexer& lex)
+            -> g10::result_uptr<ast_expression>;
+
+        /**
+         * @brief   Parses a unary expression (`-`, `~`, `!`) from the token
+         *          stream.
+         * 
+         * Unary operators have the highest precedence among expression operators.
+         * They apply to the operand immediately following them. Unary expressions
+         * can be nested (e.g., `--x`, `~~y`).
+         * 
+         * Supported unary operators:
+         * - `-` : Arithmetic negation
+         * - `~` : Bitwise NOT (complement)
+         * - `!` : Logical NOT
+         * 
+         * @param   lex     The lexer instance providing the sequence of tokens
+         *                  to be parsed.
+         * 
+         * @return  If successful, returns a unique pointer to the AST node
+         *          representing the parsed expression;
+         *          Otherwise, returns an error.
+         */
+        static auto parse_unary_expression (lexer& lex)
+            -> g10::result_uptr<ast_expression>;
+
+        /**
          * @brief   Parses a primary G10 assembly expression from the token
          *          stream provided by the given lexer.
+         * 
+         * Primary expressions are the atomic building blocks of all expressions.
+         * They include literals (integer, number, character, string),
+         * identifiers, variables, placeholders, and grouped expressions
+         * (parenthesized sub-expressions).
          *
          * @param   lex     The lexer instance providing the sequence of tokens
          *                  to be parsed.

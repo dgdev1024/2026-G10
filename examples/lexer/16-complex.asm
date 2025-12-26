@@ -8,7 +8,7 @@ main:
     ld d0, 0x12345678
     ld d1, [data]
     add d0, d1
-    cmp d0, 100
+    cmp l0, 100
     jpb zc, loop
     halt
 

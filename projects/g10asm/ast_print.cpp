@@ -13,7 +13,7 @@
 
 /* Private Macros *************************************************************/
 
-#define i(l) std::string(l * 2, ' ')
+#define i(l) std::string(l * 4, ' ')
 
 /* Public Methods *************************************************************/
 
@@ -22,12 +22,12 @@ namespace g10asm
     auto ast_to_string (const ast_module& node, int indent) 
         -> std::string
     {
-        std::string result = std::format("{}module {{\n", i(indent));
+        std::string result = std::format("{}module \n", i(indent));
         for (const auto& child : node.children)
         {
             result += ast_to_string(*child, indent + 1);
         }
-        result += std::format("{}}}\n", i(indent));
+        
         return result;
     }
 
@@ -48,13 +48,13 @@ namespace g10asm
         }
         else
         {
-            std::string result = std::format("{}instruction: {} {{\n", 
+            std::string result = std::format("{}instruction: {} \n", 
                 i(indent), node.lexeme);
             for (const auto& operand : node.operands)
             {
                 result += ast_to_string(*operand, indent + 1);
             }
-            result += std::format("{}}}\n", i(indent));
+            
             return result;
         }
     }
@@ -62,87 +62,79 @@ namespace g10asm
     auto ast_to_string (const ast_dir_org& node, int indent)
         -> std::string
     {
-        std::string result = std::format("{}.org directive: {{\n", i(indent));
+        std::string result = std::format("{}.org directive: \n", i(indent));
         result += ast_to_string(*node.address_expression, indent + 1);
-        result += std::format("{}}}\n", i(indent));
+        
         return result;
     }
 
     auto ast_to_string (const ast_dir_byte& node, int indent)
         -> std::string
     {
-        std::string result = std::format("{}.byte directive: [\n", i(indent));
+        std::string result = std::format("{}.byte directive: \n", i(indent));
         for (std::size_t i = 0; i < node.values.size(); ++i)
         {
             result += ast_to_string(*node.values[i], indent + 1);
         }
-        result += std::format("{}]\n", i(indent));
+        
         return result;
     }
 
     auto ast_to_string (const ast_dir_word& node, int indent)
         -> std::string
     {
-        std::string result = std::format("{}.word directive: [\n", i(indent));
+        std::string result = std::format("{}.word directive: \n", i(indent));
         for (std::size_t i = 0; i < node.values.size(); ++i)
         {
             result += ast_to_string(*node.values[i], indent + 1);
         }
-        result += std::format("{}]\n", i(indent));
+        
         return result;
     }
 
     auto ast_to_string (const ast_dir_dword& node, int indent)
         -> std::string
     {
-        std::string result = std::format("{}.dword directive: [\n", i(indent));
+        std::string result = std::format("{}.dword directive: \n", i(indent));
         for (std::size_t i = 0; i < node.values.size(); ++i)
         {
             result += ast_to_string(*node.values[i], indent + 1);
         }
-        result += std::format("{}]\n", i(indent));
+        
         return result;
     }
 
     auto ast_to_string (const ast_dir_global& node, int indent)
         -> std::string
     {
-        std::string result = std::format("{}.global directive: [", i(indent));
+        std::string result = std::format("{}.global directive:\n", i(indent));
         for (std::size_t i = 0; i < node.symbols.size(); ++i)
         {
-            result += std::string { node.symbols[i] };
-            if (i < node.symbols.size() - 1)
-            {
-                result += ", ";
-            }
+            result += std::format("{}{}\n", i(indent + 1), 
+                node.symbols[i]);
         }
-        result += "]\n";
         return result;
     }
 
     auto ast_to_string (const ast_dir_extern& node, int indent)
         -> std::string
     {
-        std::string result = std::format("{}.extern directive: [", i(indent));
+        std::string result = std::format("{}.extern directive:\n", i(indent));
         for (std::size_t i = 0; i < node.symbols.size(); ++i)
         {
-            result += std::string { node.symbols[i] };
-            if (i < node.symbols.size() - 1)
-            {
-                result += ", ";
-            }
+            result += std::format("{}{}\n", i(indent + 1), 
+                node.symbols[i]);
         }
-        result += "]\n";
         return result;
     }   
 
     auto ast_to_string (const ast_opr_immediate& node, 
         int indent) -> std::string
     {
-        std::string result = std::format("{}immediate operand: {{\n", 
+        std::string result = std::format("{}immediate operand: \n", 
             i(indent));
         result += ast_to_string(*node.value, indent + 1);
-        result += std::format("{}}}\n", i(indent));
+        
         return result;
     }
 
@@ -163,10 +155,10 @@ namespace g10asm
     auto ast_to_string (const ast_opr_direct& node, int indent)
         -> std::string
     {
-        std::string result = std::format("{}direct operand: {{\n", 
+        std::string result = std::format("{}direct operand: \n", 
             i(indent));
         result += ast_to_string(*node.address, indent + 1);
-        result += std::format("{}}}\n", i(indent));
+        
         return result;
     }
 
@@ -180,54 +172,51 @@ namespace g10asm
     auto ast_to_string (const ast_expr_binary& node, 
         int indent) -> std::string
     {
-        std::string result = std::format("{}binary expression: {{\n", 
+        std::string result = std::format("{}binary expression: \n", 
             i(indent));
         result += std::format("{}operator: {}\n", i(indent + 1), 
             node.lexeme);
         if (node.left_operand != nullptr)
         {
-            result += std::format("{}left_operand: {{\n", i(indent + 1));
+            result += std::format("{}left_operand: \n", i(indent + 1));
             result += ast_to_string(*node.left_operand, indent + 2);
-            result += std::format("{}}}\n", i(indent + 1));
         }
 
         if (node.right_operand != nullptr)
         {
-            result += std::format("{}right_operand: {{\n", i(indent + 1));
+            result += std::format("{}right_operand: \n", i(indent + 1));
             result += ast_to_string(*node.right_operand, indent + 2);
-            result += std::format("{}}}\n", i(indent + 1));
         }
-        result += std::format("{}}}\n", i(indent));
+        
         return result;
     }
 
     auto ast_to_string (const ast_expr_unary& node, int indent)
         -> std::string
     {
-        std::string result = std::format("{}unary expression: {{\n", 
+        std::string result = std::format("{}unary expression: \n", 
             i(indent));
         result += std::format("{}operator: {}\n", i(indent + 1), 
             node.lexeme);
         if (node.operand != nullptr)
         {
-            result += std::format("{}operand: {{\n", i(indent + 1));
+            result += std::format("{}operand: \n", i(indent + 1));
             result += ast_to_string(*node.operand, indent + 2);
-            result += std::format("{}}}\n", i(indent + 1));
         }
-        result += std::format("{}}}\n", i(indent));
+        
         return result;
     }
 
     auto ast_to_string (const ast_expr_grouping& node, 
         int indent) -> std::string
     {
-        std::string result = std::format("{}grouping expression: {{\n", 
+        std::string result = std::format("{}grouping expression: \n", 
             i(indent));
         if (node.inner_expression != nullptr)
         {
             result += ast_to_string(*node.inner_expression, indent + 2);
         }
-        result += std::format("{}}}\n", i(indent));
+        
         return result;
     }
 

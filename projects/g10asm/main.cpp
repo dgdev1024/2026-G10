@@ -11,6 +11,7 @@
 #include <g10/common.hpp>
 #include <g10asm/lexer.hpp>
 #include <g10asm/parser.hpp>
+#include <g10asm/codegen.hpp>
 
 /* Private Static Variables ***************************************************/
 
@@ -237,6 +238,23 @@ auto main (int argc, const char** argv) -> int
     {
         g10asm::show_ast_output(ast_root);
         return 0;
+    }
+
+    // - Generate machine code from the AST.
+    auto codegen_result = g10asm::codegen::process(ast_root);
+    if (codegen_result.has_value() == false)
+    {
+        return 1;
+    }
+
+    // - Get the generated object file.
+    auto& object_file = codegen_result.value();
+
+    // - Save the object file to the specified output file.
+    auto save_result = object_file.save_to_file(g10asm::s_output_file);
+    if (save_result.has_value() == false)
+    {
+        return 1;
     }
 
     return 0;

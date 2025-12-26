@@ -19,7 +19,7 @@ main_loop:
     ld d0, [counter]
     dec d0
     st [counter], d0
-    cmp d0, 0
+    cmp l0, 0
     jpb zc, main_loop
     ret
 
