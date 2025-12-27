@@ -8,7 +8,7 @@
 
 /* Private Includes ***********************************************************/
 
-#include <g10/common.hpp>
+#include <g10/program.hpp>
 
 /* Private Static Variables ***************************************************/
 
@@ -133,7 +133,39 @@ auto main (int argc, const char** argv) -> int
         return 0;
     }
 
-    // - Linking functionality to be implemented here.
+    // - Load input object files.
+    std::vector<g10::object> objects;
+    for (const auto& input_path : g10link::s_input_files)
+    {
+        const auto& obj = objects.emplace_back(input_path);
+        if (obj.is_good() == false)
+        {
+            std::println(stderr, 
+                "Error: Failed to load object file '{}'.", input_path);
+            return 1;
+        }
+    }
+
+    // - Link object files into a program.
+    g10::program program;
+    auto link_result = program.link_from_objects(objects);
+    if (link_result.has_value() == false)
+    {
+        std::println(stderr, 
+            "Error: Failed to link object files into program: '{}'.", 
+            link_result.error());
+        return 1;
+    }
+
+    // - Save the linked program to the output file.
+    auto save_result = program.save_to_file(g10link::s_output_file);
+    if (save_result.has_value() == false)
+    {
+        std::println(stderr, 
+            "Error: Failed to save program to file '{}': '{}'.",
+            g10link::s_output_file, save_result.error());
+        return 1;
+    }
 
     return 0;
 }

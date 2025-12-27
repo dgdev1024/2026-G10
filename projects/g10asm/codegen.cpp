@@ -201,14 +201,16 @@ namespace g10asm
             state.location_counter
         };
 
-        // - Create a local symbol for this label.
-        // - It can be promoted to global later by .global directive.
+        // - Create a symbol for this label.
+        // - Check if the label was declared global before definition.
         g10::object_symbol symbol;
         symbol.name = label_name;
         symbol.value = state.location_counter;
         symbol.section_index = static_cast<std::uint32_t>(state.current_section_index);
         symbol.type = g10::symbol_type::label;
-        symbol.binding = g10::symbol_binding::local_;
+        // - If label was declared global before, use global binding.
+        symbol.binding = state.global_symbols.contains(label_name) ?
+            g10::symbol_binding::global : g10::symbol_binding::local_;
         symbol.flags = g10::symbol_flags::none;
 
         // - Add the symbol to the object file.
