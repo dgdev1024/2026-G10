@@ -142,7 +142,7 @@ namespace g10asm
     static auto show_version () -> void
     {
         std::println(
-            "'g10-asm' - G10 CPU Assembler Tool\n"
+            "'g10asm' - G10 CPU Assembler Tool\n"
             "By: Dennis W. Griffin <dgdev1024@gmail.com>\n"
         );
     }
@@ -150,7 +150,7 @@ namespace g10asm
     static auto show_help () -> void
     {
         std::println(
-            "Usage: g10-asm [options]\n\n"
+            "Usage: g10asm [options]\n\n"
             "Options:\n"
             "  -s, --source <file>     Specify the source file to assemble (required).\n"
             "  -o, --output <file>     Specify the output file name (required).\n"

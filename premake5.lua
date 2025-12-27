@@ -92,3 +92,15 @@ project "g10asm"
     includedirs { "./projects", "./projects/g10" }
     links { "g10" }
     
+-- Project: `g10link` - G10 Linker Tool ----------------------------------------
+
+project "g10link"
+    kind "ConsoleApp"
+
+    location "./build"
+    targetdir "./build/bin/%{cfg.system}-%{cfg.buildcfg}"
+    objdir "./build/obj/%{cfg.system}-%{cfg.buildcfg}/%{prj.name}"
+    files { "./projects/g10link/**.hpp", "./projects/g10link/**.cpp" }
+    includedirs { "./projects", "./projects/g10" }
+    links { "g10" }
+    
