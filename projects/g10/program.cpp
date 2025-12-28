@@ -96,20 +96,22 @@ namespace g10
             }
         }
 
-        // Step 1: Collect and resolve all symbols.
-        std::vector<resolved_symbol> symbols;
-        auto collect_result = collect_symbols(objects, symbols);
-        if (collect_result.has_value() == false)
-        {
-            return error(collect_result.error());
-        }
-
-        // Step 2: Collect all sections.
+        // Step 1: Collect all sections (with relocation).
+        // This must come first so we know the section address adjustments.
         std::vector<link_section> sections;
         auto sections_result = collect_sections(objects, sections);
         if (sections_result.has_value() == false)
         {
             return error(sections_result.error());
+        }
+
+        // Step 2: Collect and resolve all symbols.
+        // Symbols are adjusted based on section relocation.
+        std::vector<resolved_symbol> symbols;
+        auto collect_result = collect_symbols(objects, symbols, sections);
+        if (collect_result.has_value() == false)
+        {
+            return error(collect_result.error());
         }
 
         // Step 3: Apply relocations to patch section data.
@@ -827,12 +829,61 @@ namespace g10
 {
     auto program::collect_symbols (
         const std::vector<object>& objects,
-        std::vector<resolved_symbol>& symbols
+        std::vector<resolved_symbol>& symbols,
+        const std::vector<link_section>& sections
     ) -> result<void>
     {
         // Map to track global symbols by name for duplicate detection and
         // extern resolution.
         std::unordered_map<std::string, std::size_t> global_symbol_map;
+
+        // Helper lambda to find the address adjustment for a symbol.
+        // The symbol's address needs to be adjusted based on the section
+        // relocation (difference between original and final section address).
+        // 
+        // If the exact section wasn't collected (e.g., it was empty and skipped),
+        // we fall back to finding a section in the same object that contains
+        // the symbol's address.
+        auto get_address_adjustment = [&](
+            std::size_t obj_idx,
+            std::size_t sec_idx,
+            std::uint32_t symbol_addr
+        ) -> std::int32_t
+        {
+            // First, try to find the exact section.
+            for (const auto& link_sec : sections)
+            {
+                if (link_sec.object_index == obj_idx &&
+                    link_sec.section_index == sec_idx)
+                {
+                    // Return the difference between final and original address.
+                    return static_cast<std::int32_t>(link_sec.address) -
+                           static_cast<std::int32_t>(link_sec.original_address);
+                }
+            }
+
+            // If exact section not found (was skipped as empty), find a section
+            // in the same object whose original address range contains the symbol.
+            for (const auto& link_sec : sections)
+            {
+                if (link_sec.object_index == obj_idx)
+                {
+                    const std::uint32_t sec_start = link_sec.original_address;
+                    const std::uint32_t sec_end = sec_start + 
+                        static_cast<std::uint32_t>(link_sec.data.size());
+                    
+                    if (symbol_addr >= sec_start && symbol_addr < sec_end)
+                    {
+                        // Found a section containing the symbol.
+                        return static_cast<std::int32_t>(link_sec.address) -
+                               static_cast<std::int32_t>(link_sec.original_address);
+                    }
+                }
+            }
+
+            // No adjustment needed if no matching section found.
+            return 0;
+        };
 
         // First pass: Collect all global and local symbols from each object.
         for (std::size_t obj_idx = 0; obj_idx < objects.size(); ++obj_idx)
@@ -851,11 +902,13 @@ namespace g10
                     continue;
                 }
 
-                // The symbol value is already the absolute address in the
-                // G10 assembler output, so we don't need to add the section
-                // base address. The symbol value is set to the location counter
-                // at the time of definition.
-                std::uint32_t final_address = sym.value;
+                // Get the address adjustment for this symbol's section.
+                std::int32_t adjustment = get_address_adjustment(
+                    obj_idx, sym.section_index, sym.value);
+
+                // Calculate the final address with adjustment.
+                std::uint32_t final_address = static_cast<std::uint32_t>(
+                    static_cast<std::int32_t>(sym.value) + adjustment);
 
                 // Check for duplicate global symbols.
                 if (sym.binding == symbol_binding::global)
@@ -933,7 +986,40 @@ namespace g10
         std::vector<link_section>& sections
     ) -> result<void>
     {
+        // Track the next available address for each memory region.
+        // This allows us to place sections from different objects sequentially.
+        struct region_tracker
+        {
+            std::uint32_t next_addr;    // Next available address in this region.
+            std::uint32_t base_addr;    // Base address of this region.
+            std::uint32_t end_addr;     // End address of this region.
+        };
+
+        // Define the memory regions we need to track.
+        // - Metadata region: 0x00000000 - 0x00000FFF
+        // - Interrupt region: 0x00001000 - 0x00001FFF
+        // - ROM code/data region: 0x00002000 - 0x7FFFFFFF
+        // - RAM/BSS region: 0x80000000 - 0xFFFFFFFF
+        region_tracker metadata_region  = { 0x00000000, 0x00000000, 0x00000FFF };
+        region_tracker interrupt_region = { 0x00001000, 0x00001000, 0x00001FFF };
+        region_tracker rom_region       = { 0x00002000, 0x00002000, 0x7FFFFFFF };
+        region_tracker ram_region       = { 0x80000000, 0x80000000, 0xFFFFFFFF };
+
+        // Helper to get the appropriate region tracker for an address.
+        auto get_region = [&](std::uint32_t addr) -> region_tracker*
+        {
+            if (addr <= 0x00000FFF)
+                return &metadata_region;
+            else if (addr >= 0x00001000 && addr <= 0x00001FFF)
+                return &interrupt_region;
+            else if (addr >= 0x00002000 && addr <= 0x7FFFFFFF)
+                return &rom_region;
+            else
+                return &ram_region;
+        };
+
         // Collect all non-null sections from each object file.
+        // For each section, we need to determine if it should be relocated.
         for (std::size_t obj_idx = 0; obj_idx < objects.size(); ++obj_idx)
         {
             const auto& obj = objects[obj_idx];
@@ -949,11 +1035,48 @@ namespace g10
                     continue;
                 }
 
-                // Create a link section with a copy of the data.
+                // Skip empty non-BSS sections.
+                if (sec.type != section_type::bss && sec.data.empty())
+                {
+                    continue;
+                }
+
+                // Get the section's original address and size.
+                // For BSS sections, the data size represents the reservation size.
+                std::uint32_t orig_addr = sec.virtual_address;
+                std::uint32_t sec_size = static_cast<std::uint32_t>(sec.data.size());
+                
+                // BSS sections with zero data size should be skipped.
+                if (sec.type == section_type::bss && sec_size == 0)
+                {
+                    continue;
+                }
+
+                // Get the region for this section.
+                region_tracker* region = get_region(orig_addr);
+
+                // Determine the new address for this section.
+                // If the section's address is at or after the region's next
+                // available address, use the original address.
+                // Otherwise, relocate to the next available address.
+                std::uint32_t new_addr = orig_addr;
+                
+                if (orig_addr < region->next_addr)
+                {
+                    // Section would overlap with already-placed content.
+                    // Relocate to the next available address.
+                    new_addr = region->next_addr;
+                }
+
+                // Update the region's next available address.
+                region->next_addr = new_addr + sec_size;
+
+                // Create a link section with the potentially relocated address.
                 link_section link_sec;
                 link_sec.object_index = obj_idx;
                 link_sec.section_index = sec_idx;
-                link_sec.address = sec.virtual_address;
+                link_sec.address = new_addr;
+                link_sec.original_address = orig_addr;  // Track for relocation adjustments.
                 link_sec.type = sec.type;
                 link_sec.flags = sec.flags;
 
@@ -964,7 +1087,6 @@ namespace g10
                 }
                 else
                 {
-                    // BSS sections just reserve space; store size for reference.
                     link_sec.data.resize(0);
                 }
 
@@ -1052,6 +1174,56 @@ namespace g10
                 // Resolve the symbol's final address.
                 std::uint32_t symbol_address = 0;
 
+                // Helper to get the adjusted address for a local symbol.
+                // The symbol value is relative to the original section address,
+                // but the section may have been relocated.
+                // If the exact section wasn't collected, find a section that
+                // contains the symbol's address.
+                auto get_local_symbol_address = [&](
+                    std::size_t sym_section_index,
+                    std::uint32_t sym_value
+                ) -> std::uint32_t
+                {
+                    // First, try to find the exact section.
+                    const std::uint64_t local_sec_key =
+                        (static_cast<std::uint64_t>(obj_idx) << 32) |
+                        sym_section_index;
+                    auto local_sec_it = section_map.find(local_sec_key);
+                    if (local_sec_it != section_map.end())
+                    {
+                        const auto& link_sec = sections[local_sec_it->second];
+                        // Calculate adjustment: final - original address.
+                        std::int32_t adjustment = 
+                            static_cast<std::int32_t>(link_sec.address) -
+                            static_cast<std::int32_t>(link_sec.original_address);
+                        return static_cast<std::uint32_t>(
+                            static_cast<std::int32_t>(sym_value) + adjustment);
+                    }
+
+                    // Fallback: find a section containing the symbol address.
+                    for (const auto& link_sec : sections)
+                    {
+                        if (link_sec.object_index == obj_idx)
+                        {
+                            const std::uint32_t sec_start = link_sec.original_address;
+                            const std::uint32_t sec_end = sec_start + 
+                                static_cast<std::uint32_t>(link_sec.data.size());
+                            
+                            if (sym_value >= sec_start && sym_value < sec_end)
+                            {
+                                std::int32_t adjustment = 
+                                    static_cast<std::int32_t>(link_sec.address) -
+                                    static_cast<std::int32_t>(link_sec.original_address);
+                                return static_cast<std::uint32_t>(
+                                    static_cast<std::int32_t>(sym_value) + adjustment);
+                            }
+                        }
+                    }
+
+                    // No adjustment found.
+                    return sym_value;
+                };
+
                 if (ref_sym.binding == symbol_binding::extern_)
                 {
                     // Look up the global definition.
@@ -1077,24 +1249,16 @@ namespace g10
                     }
                     else
                     {
-                        // Calculate from local object data.
-                        symbol_address = ref_sym.value;
-                        if (ref_sym.section_index < obj.get_sections().size())
-                        {
-                            symbol_address +=
-                                obj.get_sections()[ref_sym.section_index].virtual_address;
-                        }
+                        // Calculate from local object data with adjustment.
+                        symbol_address = get_local_symbol_address(
+                            ref_sym.section_index, ref_sym.value);
                     }
                 }
                 else
                 {
-                    // Local symbol - calculate address from object data.
-                    symbol_address = ref_sym.value;
-                    if (ref_sym.section_index < obj.get_sections().size())
-                    {
-                        symbol_address +=
-                            obj.get_sections()[ref_sym.section_index].virtual_address;
-                    }
+                    // Local symbol - calculate address with adjustment.
+                    symbol_address = get_local_symbol_address(
+                        ref_sym.section_index, ref_sym.value);
                 }
 
                 // Add the relocation addend.
@@ -1250,18 +1414,10 @@ namespace g10
             return {};
         }
 
-        // Group sections into segments by type and contiguity.
-        // Sections are already sorted by address.
-
-        for (const auto& sec : sections)
+        // Helper lambda to determine segment type and flags from section.
+        auto get_segment_info = [](const link_section& sec)
+            -> std::pair<segment_type, segment_flags>
         {
-            // Skip empty non-BSS sections.
-            if (sec.type != section_type::bss && sec.data.empty())
-            {
-                continue;
-            }
-
-            // Determine the segment type based on section type.
             segment_type seg_type = segment_type::null_;
             segment_flags seg_flags = segment_flags::none;
 
@@ -1284,12 +1440,10 @@ namespace g10
 
             case section_type::null_:
             default:
-                continue;  // Skip null sections.
+                break;
             }
 
-            // Determine if this section is in a special region.
-            // Note: sec.address is unsigned, so >= 0 is always true; we only
-            // need to check the upper bound for the metadata region.
+            // Override type for special memory regions.
             if (sec.address <= 0x00000FFF)
             {
                 seg_type = segment_type::metadata;
@@ -1300,54 +1454,246 @@ namespace g10
                 seg_flags = segment_flags::load | segment_flags::exec;
             }
 
-            // Try to merge with the last segment if compatible.
-            bool merged = false;
-            if (m_segments.empty() == false)
-            {
-                auto& last = m_segments.back();
-                const std::uint32_t last_end =
-                    last.load_address + last.memory_size;
+            return { seg_type, seg_flags };
+        };
 
-                // Check if this section is contiguous with and compatible with
-                // the last segment.
-                if (sec.address == last_end &&
-                    last.type == seg_type &&
-                    sec.type != section_type::bss)
+        // Helper lambda to check if two segment types are compatible for merging.
+        auto types_compatible = [](segment_type a, segment_type b) -> bool
+        {
+            // Same type is always compatible.
+            if (a == b) return true;
+
+            // Code and data in ROM can be merged (both are loadable ROM data).
+            if ((a == segment_type::code || a == segment_type::data) &&
+                (b == segment_type::code || b == segment_type::data))
+            {
+                return true;
+            }
+
+            return false;
+        };
+
+        // Helper lambda to merge section data into segment, handling overlaps.
+        auto merge_section_into_segment = [](
+            program_segment& segment,
+            const link_section& sec
+        ) -> void
+        {
+            // Calculate the range of the section relative to the segment.
+            const std::uint32_t seg_start = segment.load_address;
+            const std::uint32_t seg_end = seg_start + segment.memory_size;
+            const std::uint32_t sec_start = sec.address;
+            const std::uint32_t sec_end = sec_start + 
+                static_cast<std::uint32_t>(sec.data.size());
+
+            // Case 1: Section is entirely within existing segment range.
+            // Just overwrite the overlapping portion.
+            if (sec_start >= seg_start && sec_end <= seg_end)
+            {
+                const std::size_t offset = sec_start - seg_start;
+                std::copy(sec.data.begin(), sec.data.end(),
+                    segment.data.begin() + offset);
+                return;
+            }
+
+            // Case 2: Section extends before the segment start.
+            // (This shouldn't happen if sections are sorted, but handle it.)
+            if (sec_start < seg_start)
+            {
+                // Prepend data before current segment.
+                const std::size_t prepend_size = seg_start - sec_start;
+                std::vector<std::uint8_t> new_data;
+                new_data.reserve(prepend_size + segment.data.size());
+                
+                // Add bytes from section that come before segment.
+                new_data.insert(new_data.end(),
+                    sec.data.begin(),
+                    sec.data.begin() + prepend_size);
+                
+                // Add existing segment data.
+                new_data.insert(new_data.end(),
+                    segment.data.begin(),
+                    segment.data.end());
+                
+                segment.data = std::move(new_data);
+                segment.load_address = sec_start;
+                segment.memory_size = static_cast<std::uint32_t>(segment.data.size());
+                
+                // If section also extends past old end, handle that.
+                if (sec_end > seg_end)
                 {
-                    // Merge: append data and update size.
-                    last.data.insert(last.data.end(),
-                        sec.data.begin(), sec.data.end());
-                    last.memory_size += static_cast<std::uint32_t>(sec.data.size());
+                    const std::size_t append_start = seg_end - sec_start;
+                    segment.data.insert(segment.data.end(),
+                        sec.data.begin() + append_start,
+                        sec.data.end());
+                    segment.memory_size = static_cast<std::uint32_t>(segment.data.size());
+                }
+                return;
+            }
+
+            // Case 3: Section starts within segment but extends past end.
+            if (sec_start >= seg_start && sec_start <= seg_end && sec_end > seg_end)
+            {
+                // Overwrite overlapping portion.
+                const std::size_t overlap_offset = sec_start - seg_start;
+                const std::size_t overlap_size = seg_end - sec_start;
+                
+                if (overlap_size > 0)
+                {
+                    std::copy(sec.data.begin(),
+                        sec.data.begin() + overlap_size,
+                        segment.data.begin() + overlap_offset);
+                }
+                
+                // Append the portion that extends past.
+                segment.data.insert(segment.data.end(),
+                    sec.data.begin() + overlap_size,
+                    sec.data.end());
+                segment.memory_size = static_cast<std::uint32_t>(segment.data.size());
+                return;
+            }
+
+            // Case 4: Section is entirely after segment (contiguous or gap).
+            // This is the simple append case.
+            if (sec_start >= seg_end)
+            {
+                // Fill gap with zeros if there is one.
+                if (sec_start > seg_end)
+                {
+                    const std::size_t gap_size = sec_start - seg_end;
+                    segment.data.resize(segment.data.size() + gap_size, 0x00);
+                }
+                
+                // Append section data.
+                segment.data.insert(segment.data.end(),
+                    sec.data.begin(), sec.data.end());
+                segment.memory_size = static_cast<std::uint32_t>(segment.data.size());
+                return;
+            }
+        };
+
+        // Process each section and merge into segments.
+        for (const auto& sec : sections)
+        {
+            // Skip empty non-BSS sections.
+            if (sec.type != section_type::bss && sec.data.empty())
+            {
+                continue;
+            }
+
+            auto [seg_type, seg_flags] = get_segment_info(sec);
+            if (seg_type == segment_type::null_)
+            {
+                continue;
+            }
+
+            // For BSS sections, handle separately.
+            if (sec.type == section_type::bss)
+            {
+                // Find or create a BSS segment.
+                bool found = false;
+                for (auto& segment : m_segments)
+                {
+                    if (segment.type == segment_type::bss)
+                    {
+                        // Extend BSS segment if needed.
+                        // BSS just needs to track the total memory reservation.
+                        const std::uint32_t seg_end = 
+                            segment.load_address + segment.memory_size;
+                        
+                        // Use the minimum address and maximum extent.
+                        if (sec.address < segment.load_address)
+                        {
+                            segment.memory_size += 
+                                segment.load_address - sec.address;
+                            segment.load_address = sec.address;
+                        }
+                        
+                        found = true;
+                        break;
+                    }
+                }
+                
+                if (!found)
+                {
+                    // Create new BSS segment.
+                    program_segment segment;
+                    segment.load_address = sec.address;
+                    segment.memory_size = 0;  // Will be set by caller.
+                    segment.type = seg_type;
+                    segment.flags = seg_flags;
+                    segment.data.clear();
+                    m_segments.push_back(std::move(segment));
+                }
+                continue;
+            }
+
+            // For non-BSS sections, find a compatible segment to merge into.
+            bool merged = false;
+            for (auto& segment : m_segments)
+            {
+                // Skip BSS segments for non-BSS sections.
+                if (segment.type == segment_type::bss)
+                {
+                    continue;
+                }
+
+                // Check if types are compatible.
+                if (!types_compatible(segment.type, seg_type))
+                {
+                    continue;
+                }
+
+                const std::uint32_t seg_start = segment.load_address;
+                const std::uint32_t seg_end = seg_start + segment.memory_size;
+                const std::uint32_t sec_start = sec.address;
+                const std::uint32_t sec_end = sec_start + 
+                    static_cast<std::uint32_t>(sec.data.size());
+
+                // Check if section overlaps or is contiguous with this segment.
+                // Allow a small gap (up to 16 bytes) for contiguous merging to
+                // reduce fragmentation.
+                constexpr std::uint32_t MAX_GAP = 16;
+                
+                bool overlaps = (sec_start < seg_end && sec_end > seg_start);
+                bool contiguous = (sec_start <= seg_end + MAX_GAP && 
+                                   sec_start >= seg_start);
+                
+                if (overlaps || contiguous)
+                {
+                    merge_section_into_segment(segment, sec);
+                    
+                    // Update type to be the more specific one.
+                    if (seg_type == segment_type::interrupt)
+                    {
+                        segment.type = segment_type::interrupt;
+                    }
+                    
                     merged = true;
+                    break;
                 }
             }
 
-            if (merged == false)
+            if (!merged)
             {
                 // Create a new segment.
                 program_segment segment;
                 segment.load_address = sec.address;
+                segment.memory_size = static_cast<std::uint32_t>(sec.data.size());
                 segment.type = seg_type;
                 segment.flags = seg_flags;
-
-                if (sec.type == section_type::bss)
-                {
-                    // BSS segments have memory_size from the object but no data.
-                    // We need to get the original section size from the object.
-                    // For now, we'll use a placeholder - actual size comes from
-                    // the object's section.
-                    segment.memory_size = 0;  // Will be set from object data.
-                    segment.data.clear();
-                }
-                else
-                {
-                    segment.memory_size = static_cast<std::uint32_t>(sec.data.size());
-                    segment.data = sec.data;
-                }
-
+                segment.data = sec.data;
                 m_segments.push_back(std::move(segment));
             }
         }
+
+        // Sort segments by load address for cleaner output.
+        std::sort(m_segments.begin(), m_segments.end(),
+            [](const program_segment& a, const program_segment& b)
+            {
+                return a.load_address < b.load_address;
+            }
+        );
 
         return {};
     }

@@ -472,12 +472,13 @@ namespace g10
          */
         struct link_section final
         {
-            std::size_t             object_index;   /** @brief Source object index */
-            std::size_t             section_index;  /** @brief Index within object */
-            std::uint32_t           address;        /** @brief Final address */
-            std::vector<std::uint8_t> data;         /** @brief Section data (copy) */
-            section_type            type;           /** @brief Section type */
-            section_flags           flags;          /** @brief Section flags */
+            std::size_t             object_index;       /** @brief Source object index */
+            std::size_t             section_index;      /** @brief Index within object */
+            std::uint32_t           address;            /** @brief Final (relocated) address */
+            std::uint32_t           original_address;   /** @brief Original address before relocation */
+            std::vector<std::uint8_t> data;             /** @brief Section data (copy) */
+            section_type            type;               /** @brief Section type */
+            section_flags           flags;              /** @brief Section flags */
         };
 
         /**
@@ -485,20 +486,24 @@ namespace g10
          * 
          * @param   objects     The input object files.
          * @param   symbols     Output: resolved symbol table.
+         * @param   sections    The collected sections (for address adjustment).
          * 
          * @return  If successful, returns `void`;
          *          Otherwise, returns an error message.
          */
         auto collect_symbols (
             const std::vector<object>& objects,
-            std::vector<resolved_symbol>& symbols
+            std::vector<resolved_symbol>& symbols,
+            const std::vector<link_section>& sections
         ) -> result<void>;
 
         /**
          * @brief   Collects all sections from input object files for linking.
+         *          Sections are relocated to avoid overlaps within each memory
+         *          region.
          * 
          * @param   objects     The input object files.
-         * @param   sections    Output: collected sections.
+         * @param   sections    Output: collected sections with final addresses.
          * 
          * @return  If successful, returns `void`;
          *          Otherwise, returns an error message.
