@@ -28,6 +28,9 @@ namespace g10asm
         label_definition,       /** @brief An AST node representing the definition of an address label (`label:`). */
         instruction,            /** @brief An AST node representing a CPU instruction. */
         dir_org,                /** @brief An AST node representing an `.org` directive. */
+        dir_rom,                /** @brief An AST node representing a `.rom` directive. */
+        dir_ram,                /** @brief An AST node representing a `.ram` directive. */
+        dir_int,                /** @brief An AST node representing a `.int` directive. */
         dir_byte,               /** @brief An AST node representing a `.byte` directive. */
         dir_word,               /** @brief An AST node representing a `.word` directive. */
         dir_dword,              /** @brief An AST node representing a `.dword` directive. */
@@ -279,6 +282,92 @@ namespace g10asm
     {
         ast_node_ctor(ast_dir_org, ast_node_type::dir_org)
         std::unique_ptr<ast_expression> address_expression;    /** @brief The AST node representing the address expression specified by this directive. */
+    };
+
+    /**
+     * @brief   Defines a structure representing an AST node for a `.rom`
+     *          directive.
+     * 
+     * The `.rom` directive is used to switch the assembler's location counter
+     * to the ROM region of the assembled output, where it last left off when
+     * previously in ROM mode.
+     * 
+     * Example:
+     * ```asm
+     * .org 0x2000                  ; Set origin to address 0x2000 (in program ROM)
+     *     .byte 0x01, 0x02, 0x03   ; Define some data bytes in ROM
+     * .ram                         ; Switch to RAM region (here same as `.org 0x80000000`)
+     *     .byte 64                 ; Reserve 64 bytes of un-initialized (BSS) space in RAM
+     * .rom                         ; Switch back to ROM region (here same as `.org 0x2003`)
+     *     .byte 0x04, 0x05, 0x06   ; Define more data bytes in ROM
+     * .ram                         ; Switch back to RAM region (here same as `.org 0x80000040`)
+     *     .byte 128                ; Reserve 128 bytes of un-initialized (BSS) space in RAM
+     * ```
+     */
+    struct ast_dir_rom final : public ast_node
+    {
+        ast_node_ctor(ast_dir_rom, ast_node_type::dir_rom)
+    };
+
+    /**
+     * @brief   Defines a structure representing an AST node for a `.ram`
+     *          directive.
+     * 
+     * The `.ram` directive is used to switch the assembler's location counter
+     * to the RAM region of the assembled output, where it last left off when
+     * previously in RAM mode.
+     * 
+     * Example:
+     * ```asm
+     * .org 0x2000                  ; Set origin to address 0x2000 (in program ROM)
+     *     .byte 0x01, 0x02, 0x03   ; Define some data bytes in ROM
+     * .ram                         ; Switch to RAM region (here same as `.org 0x80000000`)
+     *     .byte 64                 ; Reserve 64 bytes of un-initialized (BSS) space in RAM
+     * .rom                         ; Switch back to ROM region (here same as `.org 0x2003`)
+     *     .byte 0x04, 0x05, 0x06   ; Define more data bytes in ROM
+     * .ram                         ; Switch back to RAM region (here same as `.org 0x80000040`)
+     *     .byte 128                ; Reserve 128 bytes of un-initialized (BSS) space in RAM
+     * ```
+     */
+    struct ast_dir_ram final : public ast_node
+    {
+        ast_node_ctor(ast_dir_ram, ast_node_type::dir_ram)
+    };
+
+    /**
+     * @brief   Defines a structure representing an AST node for a `.int`
+     *          directive.
+     * 
+     * The `.int` directive is a shorthand for setting the assembler's location
+     * counter to the starting address of one of the G10's 32 interrupt vector
+     * subroutines. Each interrupt vector subroutine occupies 0x80 (128) bytes
+     * of space in the interrupt table region, starting at address $1000.
+     * 
+     * The directive takes a single integer argument specifying the vector
+     * number (0-31). The location counter is set to the calculated address
+     * of that vector: $1000 + (vector * 0x80).
+     * 
+     * Example:
+     * ```asm
+     * .int 0                       ; Set origin to $1000 (exception handler)
+     * exception_handler:
+     *     ; ... exception handling code ...
+     *     stop
+     * 
+     * .int 3                       ; Set origin to $1180 (timer interrupt)
+     * timer_isr:
+     *     ; ... timer interrupt handling code ...
+     *     reti
+     * ```
+     */
+    struct ast_dir_int final : public ast_node
+    {
+        ast_node_ctor(ast_dir_int, ast_node_type::dir_int)
+
+        /**
+         * @brief   The expression specifying the interrupt vector number (0-31).
+         */
+        std::unique_ptr<ast_expression> vector_expression = nullptr;
     };
 
     /**

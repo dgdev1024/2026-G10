@@ -140,6 +140,57 @@ namespace g10asm
             -> g10::result_uptr<ast_node>;
 
         /**
+         * @brief   Parses a `.rom` assembler directive from the token
+         *          stream provided by the given lexer.
+         * 
+         * @param   lex     The lexer instance providing the sequence of tokens
+         *                  to be parsed.
+         * @param   dir_tk  The token representing the `.rom` directive
+         *                  keyword.
+         * 
+         * @return  If successful, returns a unique pointer to the AST node
+         *          representing the parsed `.rom` directive;
+         *          Otherwise, returns an error indicating that a parsing error
+         *          occurred.
+         */
+        static auto parse_dir_rom (lexer& lex, const token& dir_tk)
+            -> g10::result_uptr<ast_node>;
+
+        /**
+         * @brief   Parses a `.ram` assembler directive from the token
+         *          stream provided by the given lexer.
+         * 
+         * @param   lex     The lexer instance providing the sequence of tokens
+         *                  to be parsed.
+         * @param   dir_tk  The token representing the `.ram` directive
+         *                  keyword.
+         * 
+         * @return  If successful, returns a unique pointer to the AST node
+         *          representing the parsed `.ram` directive;
+         *          Otherwise, returns an error indicating that a parsing error
+         *          occurred.
+         */
+        static auto parse_dir_ram (lexer& lex, const token& dir_tk)
+            -> g10::result_uptr<ast_node>;
+
+        /**
+         * @brief   Parses a `.int` assembler directive from the token
+         *          stream provided by the given lexer.
+         * 
+         * @param   lex     The lexer instance providing the sequence of tokens
+         *                  to be parsed.
+         * @param   dir_tk  The token representing the `.int` directive
+         *                  keyword.
+         * 
+         * @return  If successful, returns a unique pointer to the AST node
+         *          representing the parsed `.int` directive;
+         *          Otherwise, returns an error indicating that a parsing error
+         *          occurred.
+         */
+        static auto parse_dir_int (lexer& lex, const token& dir_tk)
+            -> g10::result_uptr<ast_node>;
+
+        /**
          * @brief   Parses a `.byte` assembler directive from the token
          *          stream provided by the given lexer.
          * 

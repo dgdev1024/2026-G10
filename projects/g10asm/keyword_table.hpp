@@ -36,6 +36,9 @@ namespace g10asm
     enum class directive_type
     {
         org,        /** @brief The `.org` directive sets the location counter to a specified address. */
+        rom,        /** @brief The `.rom` directive switches the location counter to the ROM region. */
+        ram,        /** @brief The `.ram` directive switches the location counter to the RAM region. */
+        int_,       /** @brief The `.int` directive sets the location counter to an interrupt vector subroutine. */
         byte,       /** @brief The `.byte` directive defines or reserves one or more bytes of data. */
         word,       /** @brief The `.word` directive defines or reserves one or more words (2 bytes) of data. */
         dword,      /** @brief The `.dword` directive defines or reserves one or more double words (4 bytes) of data. */

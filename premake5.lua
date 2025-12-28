@@ -104,3 +104,15 @@ project "g10link"
     includedirs { "./projects", "./projects/g10" }
     links { "g10" }
     
+-- Project: `g10tmu` - G10 Testbed Emulator ------------------------------------
+
+project "g10tmu"
+    kind "ConsoleApp"
+
+    location "./build"
+    targetdir "./build/bin/%{cfg.system}-%{cfg.buildcfg}"
+    objdir "./build/obj/%{cfg.system}-%{cfg.buildcfg}/%{prj.name}"
+    files { "./projects/g10tmu/**.hpp", "./projects/g10tmu/**.cpp" }
+    includedirs { "./projects", "./projects/g10" }
+    links { "g10" }
+    

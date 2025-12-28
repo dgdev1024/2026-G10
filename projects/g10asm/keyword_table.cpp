@@ -90,6 +90,9 @@ namespace g10asm
 
         // Assembler Directives
         { ".org", keyword_type::assembler_directive, std::to_underlying(directive_type::org), 0 },
+        { ".rom", keyword_type::assembler_directive, std::to_underlying(directive_type::rom), 0 },
+        { ".ram", keyword_type::assembler_directive, std::to_underlying(directive_type::ram), 0 },
+        { ".int", keyword_type::assembler_directive, std::to_underlying(directive_type::int_), 0 },
         { ".byte", keyword_type::assembler_directive, std::to_underlying(directive_type::byte), 0 },
         { ".word", keyword_type::assembler_directive, std::to_underlying(directive_type::word), 0 },
         { ".dword", keyword_type::assembler_directive, std::to_underlying(directive_type::dword), 0 },

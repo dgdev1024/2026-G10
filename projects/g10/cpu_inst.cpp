@@ -125,14 +125,14 @@ namespace g10
 {
     auto cpu::ld_lx_imm8 () -> bool
     {
-        auto dest_reg = low_byte_reg(m_opcode >> 8);
+        auto dest_reg = low_byte_reg(m_opcode >> 4);
         write_register(dest_reg, m_fetch_data & 0xFF);
         return true;
     }
 
     auto cpu::ld_lx_addr32 () -> bool
     {
-        auto dest_reg = low_byte_reg(m_opcode >> 8);
+        auto dest_reg = low_byte_reg(m_opcode >> 4);
         std::uint8_t value = 0;
 
         if (read_byte(m_fetch_data, value) == false)
@@ -144,7 +144,7 @@ namespace g10
 
     auto cpu::ld_lx_pdy () -> bool
     {
-        auto dest_reg = low_byte_reg(m_opcode >> 8);
+        auto dest_reg = low_byte_reg(m_opcode >> 4);
         auto src_reg = full_reg(m_opcode);
         std::uint32_t address = read_register(src_reg);
         std::uint8_t value = 0;
@@ -157,7 +157,7 @@ namespace g10
 
     auto cpu::ldq_lx_addr16 () -> bool
     {
-        auto dest_reg = low_byte_reg(m_opcode >> 8);
+        auto dest_reg = low_byte_reg(m_opcode >> 4);
         std::uint32_t address = 0xFFFF0000 | (m_fetch_data & 0x0000FFFF);
         std::uint8_t value = 0;
 
@@ -170,7 +170,7 @@ namespace g10
 
     auto cpu::ldq_lx_pwy () -> bool
     {
-        auto dest_reg = low_byte_reg(m_opcode >> 8);
+        auto dest_reg = low_byte_reg(m_opcode >> 4);
         auto src_reg = word_reg(m_opcode);
         std::uint32_t address = read_register(src_reg);
         std::uint8_t value = 0;
@@ -183,7 +183,7 @@ namespace g10
 
     auto cpu::ldp_lx_addr8 () -> bool
     {
-        auto dest_reg = low_byte_reg(m_opcode >> 8);
+        auto dest_reg = low_byte_reg(m_opcode >> 4);
         std::uint32_t address = 0xFFFFFF00 | (m_fetch_data & 0x000000FF);
         std::uint8_t value = 0;
 
@@ -196,7 +196,7 @@ namespace g10
 
     auto cpu::ldp_lx_ply () -> bool
     {
-        auto dest_reg = low_byte_reg(m_opcode >> 8);
+        auto dest_reg = low_byte_reg(m_opcode >> 4);
         auto src_reg = low_byte_reg(m_opcode);
         std::uint32_t address = read_register(src_reg);
         std::uint8_t value = 0;
@@ -220,7 +220,7 @@ namespace g10
 
     auto cpu::st_pdx_ly () -> bool
     {
-        auto dest_reg = full_reg(m_opcode >> 8);
+        auto dest_reg = full_reg(m_opcode >> 4);
         auto src_reg = low_byte_reg(m_opcode);
         std::uint32_t address = read_register(dest_reg);
         std::uint8_t value = read_register(src_reg);
@@ -245,7 +245,7 @@ namespace g10
 
     auto cpu::stq_pwx_ly () -> bool
     {
-        auto dest_reg = word_reg(m_opcode >> 8);
+        auto dest_reg = word_reg(m_opcode >> 4);
         auto src_reg = low_byte_reg(m_opcode);
         std::uint32_t address = read_register(dest_reg);
         std::uint8_t value = read_register(src_reg);
@@ -283,7 +283,7 @@ namespace g10
 
     auto cpu::mv_lx_ly () -> bool
     {
-        auto dest_reg = low_byte_reg(m_opcode >> 8);
+        auto dest_reg = low_byte_reg(m_opcode >> 4);
         auto src_reg = low_byte_reg(m_opcode);
         std::uint8_t value = read_register(src_reg);
         write_register(dest_reg, value);
@@ -292,7 +292,7 @@ namespace g10
 
     auto cpu::mv_hx_ly () -> bool
     {
-        auto dest_reg = high_byte_reg(m_opcode >> 8);
+        auto dest_reg = high_byte_reg(m_opcode >> 4);
         auto src_reg = low_byte_reg(m_opcode);
         std::uint8_t value = read_register(src_reg);
         write_register(dest_reg, value);
@@ -301,7 +301,7 @@ namespace g10
 
     auto cpu::mv_lx_hy () -> bool
     {
-        auto dest_reg = low_byte_reg(m_opcode >> 8);
+        auto dest_reg = low_byte_reg(m_opcode >> 4);
         auto src_reg = high_byte_reg(m_opcode);
         std::uint8_t value = read_register(src_reg);
         write_register(dest_reg, value);
@@ -315,14 +315,14 @@ namespace g10
 {
     auto cpu::ld_wx_imm16 () -> bool
     {
-        auto dest_reg = word_reg(m_opcode >> 8);
+        auto dest_reg = word_reg(m_opcode >> 4);
         write_register(dest_reg, m_fetch_data & 0xFFFF);
         return true;
     }
 
     auto cpu::ld_wx_addr32 () -> bool
     {
-        auto dest_reg = word_reg(m_opcode >> 8);
+        auto dest_reg = word_reg(m_opcode >> 4);
         std::uint16_t value = 0;
 
         if (read_word(m_fetch_data, value) == false)
@@ -334,7 +334,7 @@ namespace g10
 
     auto cpu::ld_wx_pdy () -> bool
     {
-        auto dest_reg = word_reg(m_opcode >> 8);
+        auto dest_reg = word_reg(m_opcode >> 4);
         auto src_reg = full_reg(m_opcode);
         std::uint32_t address = read_register(src_reg);
         std::uint16_t value = 0;
@@ -347,7 +347,7 @@ namespace g10
 
     auto cpu::ldq_wx_addr16 () -> bool
     {
-        auto dest_reg = word_reg(m_opcode >> 8);
+        auto dest_reg = word_reg(m_opcode >> 4);
         std::uint32_t address = 0xFFFF0000 | (m_fetch_data & 0x0000FFFF);
         std::uint16_t value = 0;
 
@@ -360,7 +360,7 @@ namespace g10
 
     auto cpu::ldq_wx_pwy () -> bool
     {
-        auto dest_reg = word_reg(m_opcode >> 8);
+        auto dest_reg = word_reg(m_opcode >> 4);
         auto src_reg = word_reg(m_opcode);
         std::uint32_t address = 0xFFFF0000 | read_register(src_reg);
         std::uint16_t value = 0;
@@ -384,7 +384,7 @@ namespace g10
 
     auto cpu::st_pdx_wy () -> bool
     {
-        auto dest_reg = full_reg(m_opcode >> 8);
+        auto dest_reg = full_reg(m_opcode >> 4);
         auto src_reg = word_reg(m_opcode);
         std::uint32_t address = read_register(dest_reg);
         std::uint16_t value = read_register(src_reg);
@@ -409,7 +409,7 @@ namespace g10
 
     auto cpu::stq_pwx_wy () -> bool
     {
-        auto dest_reg = word_reg(m_opcode >> 8);
+        auto dest_reg = word_reg(m_opcode >> 4);
         auto src_reg = word_reg(m_opcode);
         std::uint32_t address = 0xFFFF0000 | read_register(dest_reg);
         std::uint16_t value = read_register(src_reg);
@@ -422,7 +422,7 @@ namespace g10
 
     auto cpu::mv_wx_wy () -> bool
     {
-        auto dest_reg = word_reg(m_opcode >> 8);
+        auto dest_reg = word_reg(m_opcode >> 4);
         auto src_reg = word_reg(m_opcode);
         std::uint16_t value = read_register(src_reg);
         write_register(dest_reg, value);
@@ -431,7 +431,7 @@ namespace g10
 
     auto cpu::mwh_dx_wy () -> bool
     {
-        auto dest_reg = word_reg(m_opcode >> 8);
+        auto dest_reg = word_reg(m_opcode >> 4);
         auto src_reg = full_reg(m_opcode);
         std::uint32_t dest_value = read_register(dest_reg);
         std::uint16_t src_value = read_register(src_reg);
@@ -445,7 +445,7 @@ namespace g10
 
     auto cpu::mwl_wx_dy () -> bool
     {
-        auto dest_reg = word_reg(m_opcode >> 8);
+        auto dest_reg = word_reg(m_opcode >> 4);
         auto src_reg = full_reg(m_opcode);
         std::uint32_t src_value = read_register(src_reg);
         std::uint16_t dest_value =
@@ -464,14 +464,14 @@ namespace g10
 {
     auto cpu::ld_dx_imm32 () -> bool
     {
-        auto dest_reg = full_reg(m_opcode >> 8);
+        auto dest_reg = full_reg(m_opcode >> 4);
         write_register(dest_reg, m_fetch_data);
         return true;
     }
 
     auto cpu::ld_dx_addr32 () -> bool
     {
-        auto dest_reg = full_reg(m_opcode >> 8);
+        auto dest_reg = full_reg(m_opcode >> 4);
         std::uint32_t value = 0;
 
         if (read_dword(m_fetch_data, value) == false)
@@ -483,7 +483,7 @@ namespace g10
 
     auto cpu::ld_dx_pdy () -> bool
     {
-        auto dest_reg = full_reg(m_opcode >> 8);
+        auto dest_reg = full_reg(m_opcode >> 4);
         auto src_reg = full_reg(m_opcode);
         std::uint32_t address = read_register(src_reg);
         std::uint32_t value = 0;
@@ -496,7 +496,7 @@ namespace g10
 
     auto cpu::ldq_dx_addr16 () -> bool
     {
-        auto dest_reg = full_reg(m_opcode >> 8);
+        auto dest_reg = full_reg(m_opcode >> 4);
         std::uint32_t address = 0xFFFF0000 | (m_fetch_data & 0x0000FFFF);
         std::uint32_t value = 0;
 
@@ -509,7 +509,7 @@ namespace g10
 
     auto cpu::ldq_dx_pwy () -> bool
     {
-        auto dest_reg = full_reg(m_opcode >> 8);
+        auto dest_reg = full_reg(m_opcode >> 4);
         auto src_reg = word_reg(m_opcode);
         std::uint32_t address = 0xFFFF0000 | read_register(src_reg);
         std::uint32_t value = 0;
@@ -533,7 +533,7 @@ namespace g10
         if (pop_dword(value) == false)
             { return false; }
 
-        auto dest_reg = full_reg(m_opcode >> 8);
+        auto dest_reg = full_reg(m_opcode >> 4);
         write_register(dest_reg, value);
         return true;
     }
@@ -551,7 +551,7 @@ namespace g10
 
     auto cpu::st_pdx_dy () -> bool
     {
-        auto dest_reg = full_reg(m_opcode >> 8);
+        auto dest_reg = full_reg(m_opcode >> 4);
         auto src_reg = full_reg(m_opcode);
         std::uint32_t address = read_register(dest_reg);
         std::uint32_t value = read_register(src_reg);
@@ -576,7 +576,7 @@ namespace g10
 
     auto cpu::stq_pwx_dy () -> bool
     {
-        auto dest_reg = word_reg(m_opcode >> 8);
+        auto dest_reg = word_reg(m_opcode >> 4);
         auto src_reg = full_reg(m_opcode);
         std::uint32_t address = 0xFFFF0000 | read_register(dest_reg);
         std::uint32_t value = read_register(src_reg);
@@ -599,7 +599,7 @@ namespace g10
 
     auto cpu::push_dy () -> bool
     {
-        auto src_reg = full_reg(m_opcode >> 8);
+        auto src_reg = full_reg(m_opcode >> 4);
         std::uint32_t value = read_register(src_reg);
 
         if (push_dword(value) == false)
@@ -610,7 +610,7 @@ namespace g10
 
     auto cpu::mv_dx_dy () -> bool
     {
-        auto dest_reg = full_reg(m_opcode >> 8);
+        auto dest_reg = full_reg(m_opcode >> 4);
         auto src_reg = full_reg(m_opcode);
         std::uint32_t value = read_register(src_reg);
         write_register(dest_reg, value);
@@ -620,14 +620,14 @@ namespace g10
     auto cpu::spo_dx () -> bool
     {
         auto sp = read_register(register_type::sp);
-        auto dest_reg = full_reg(m_opcode >> 8);
+        auto dest_reg = full_reg(m_opcode >> 4);
         write_register(dest_reg, sp);
         return true;
     }
 
     auto cpu::spi_dy () -> bool
     {
-        auto src_reg = full_reg(m_opcode >> 8);
+        auto src_reg = full_reg(m_opcode >> 4);
         std::uint32_t value = read_register(src_reg);
         write_register(register_type::sp, value);
         return consume_machine_cycles(1);   // - `SP` modified. Consume 1 M-cycle.

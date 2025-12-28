@@ -1255,6 +1255,12 @@ namespace g10
 
         for (const auto& sec : sections)
         {
+            // Skip empty non-BSS sections.
+            if (sec.type != section_type::bss && sec.data.empty())
+            {
+                continue;
+            }
+
             // Determine the segment type based on section type.
             segment_type seg_type = segment_type::null_;
             segment_flags seg_flags = segment_flags::none;
@@ -1402,9 +1408,10 @@ namespace g10
         }
         else
         {
-            // Use default entry point.
-            m_entry_point = PROGRAM_DEFAULT_ENTRY;
-            // Don't set has_entry flag if no explicit entry symbol.
+            return error(
+                "No entry point symbol found.\n"
+                " - Are you missing a label named \"main\" or \"_start\"?"
+            );
         }
 
         return {};

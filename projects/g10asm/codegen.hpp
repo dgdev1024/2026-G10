@@ -78,6 +78,8 @@ namespace g10asm
     {
         g10::object         object;                 /** @brief The object file being built. */
         std::uint32_t       location_counter;       /** @brief The current state of the location counter. */
+        std::uint32_t       rom_location_counter;   /** @brief The current location counter within the ROM region. */
+        std::uint32_t       ram_location_counter;   /** @brief The current location counter within the RAM region. */
         std::size_t         current_section_index;  /** @brief Index of current section. */
         bool                in_rom_region;          /** @brief Indicates whether the location counter is in the ROM region (`< $80000000`). */
         
@@ -117,6 +119,8 @@ namespace g10asm
          */
         codegen_state () :
             location_counter { 0x00002000 },
+            rom_location_counter { 0x00002000 },
+            ram_location_counter { 0x80000000 },
             current_section_index { 0 },
             in_rom_region { true }
         {}
@@ -228,6 +232,48 @@ namespace g10asm
         ) -> g10::result<void>;
 
         /**
+         * @brief   Processes a `.rom` directive in the first pass.
+         * 
+         * @param   state   The codegen state.
+         * @param   rom     The AST `.rom` directive node.
+         * 
+         * @return  If successful, returns `void`;
+         *          Otherwise, returns an error message describing the failure.
+         */
+        static auto first_pass_rom (
+            codegen_state& state,
+            ast_dir_rom& rom
+        ) -> g10::result<void>;
+
+        /**
+         * @brief   Processes a `.ram` directive in the first pass.
+         * 
+         * @param   state   The codegen state.
+         * @param   ram     The AST `.ram` directive node.
+         * 
+         * @return  If successful, returns `void`;
+         *          Otherwise, returns an error message describing the failure.
+         */
+        static auto first_pass_ram (
+            codegen_state& state,
+            ast_dir_ram& ram
+        ) -> g10::result<void>;
+
+        /**
+         * @brief   Processes a `.int` directive in the first pass.
+         * 
+         * @param   state   The codegen state.
+         * @param   int_    The AST `.int` directive node.
+         * 
+         * @return  If successful, returns `void`;
+         *          Otherwise, returns an error message describing the failure.
+         */
+        static auto first_pass_int (
+            codegen_state& state,
+            ast_dir_int& int_
+        ) -> g10::result<void>;
+
+        /**
          * @brief   Processes a data directive (`.byte`, `.word`, or `.dword`)
          *          in the first pass.
          * 
@@ -313,6 +359,45 @@ namespace g10asm
         static auto second_pass_org (
             codegen_state& state,
             ast_dir_org& org
+        ) -> g10::result<void>;
+
+        /**
+         * @brief   Processes a `.rom` directive in the second pass.
+         * 
+         * @param   state   The codegen state.
+         * @param   rom     The .rom directive node.
+         * 
+         * @return  If successful, returns void; otherwise an error.
+         */
+        static auto second_pass_rom (
+            codegen_state& state,
+            ast_dir_rom& rom
+        ) -> g10::result<void>;
+
+        /**
+         * @brief   Processes a `.ram` directive in the second pass.
+         * 
+         * @param   state   The codegen state.
+         * @param   ram     The .ram directive node.
+         * 
+         * @return  If successful, returns void; otherwise an error.
+         */
+        static auto second_pass_ram (
+            codegen_state& state,
+            ast_dir_ram& ram
+        ) -> g10::result<void>;
+
+        /**
+         * @brief   Processes a `.int` directive in the second pass.
+         * 
+         * @param   state   The codegen state.
+         * @param   int_    The .int directive node.
+         * 
+         * @return  If successful, returns void; otherwise an error.
+         */
+        static auto second_pass_int (
+            codegen_state& state,
+            ast_dir_int& int_
         ) -> g10::result<void>;
 
         /**

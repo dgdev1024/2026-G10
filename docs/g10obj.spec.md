@@ -455,6 +455,50 @@ address. This affects the virtual address field of subsequent section headers:
 The assembler may create multiple sections when `.org` is used to switch
 between non-contiguous address ranges.
 
+### `.rom` and `.ram` Directives
+
+The assembler keeps track of two addresses which are modified whenever the
+location counter is changed via the `.org` directive or when data is emitted or
+reserved:
+
+- **ROM Address**: The current address in the ROM region (for code and
+    initialized data).
+- **RAM Address**: The current address in the RAM region (for uninitialized
+    data reservations).
+
+When emitting data or reserving space, the assembler uses the appropriate
+address based on whether the current location is in ROM or RAM.
+
+The `.rom` and `.ram` directives can be used to explicitly switch the current
+location between ROM and RAM regions, affecting the location counter and section
+type for subsequent data.
+
+### `.int` Directive
+
+The `.int` directive is a shorthand for setting the assembler's location counter
+to the starting address of one of the G10's 32 interrupt vector subroutines.
+Each interrupt vector subroutine occupies `0x80` (128) bytes of space in the
+interrupt table region, starting at address `$1000`.
+
+The directive takes a single integer argument specifying the vector number
+(0-31). The location counter is set to the calculated address: 
+`$1000 + (vector × 0x80)`.
+
+```asm
+.int 0                      ; Set origin to $1000 (exception handler)
+exception_handler:
+    ; ... exception handling code ...
+    stop
+
+.int 3                      ; Set origin to $1180 (interrupt vector 3)
+timer_isr:
+    ; ... timer interrupt handling code ...
+    reti
+```
+
+The `.int` directive also switches to ROM mode if currently in RAM mode, since
+the interrupt table is located in the ROM region.
+
 ### `.byte`, `.word`, `.dword` Directives
 
 These directives emit data or reserve space, depending on the current location:

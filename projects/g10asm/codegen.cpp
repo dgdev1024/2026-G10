@@ -134,6 +134,39 @@ namespace g10asm
                     break;
                 }
 
+                case ast_node_type::dir_rom:
+                {
+                    auto& rom = static_cast<ast_dir_rom&>(*child);
+                    if (auto result = first_pass_rom(state, rom);
+                        !result.has_value())
+                    {
+                        return result;
+                    }
+                    break;
+                }
+
+                case ast_node_type::dir_ram:
+                {
+                    auto& ram = static_cast<ast_dir_ram&>(*child);
+                    if (auto result = first_pass_ram(state, ram);
+                        !result.has_value())
+                    {
+                        return result;
+                    }
+                    break;
+                }
+
+                case ast_node_type::dir_int:
+                {
+                    auto& int_ = static_cast<ast_dir_int&>(*child);
+                    if (auto result = first_pass_int(state, int_);
+                        !result.has_value())
+                    {
+                        return result;
+                    }
+                    break;
+                }
+
                 case ast_node_type::dir_byte:
                 case ast_node_type::dir_word:
                 case ast_node_type::dir_dword:
@@ -298,11 +331,147 @@ namespace g10asm
                 org.source_column);
         }
 
+        // - Save current location counter to appropriate region counter.
+        if (state.in_rom_region)
+        {
+            state.rom_location_counter = state.location_counter;
+        }
+        else
+        {
+            state.ram_location_counter = state.location_counter;
+        }
+
         // Update location counter.
         state.location_counter = new_address;
         state.in_rom_region = (new_address & 0x80000000) == 0;
 
+        // - Update region-specific location counter.
+        if (state.in_rom_region)
+        {
+            state.rom_location_counter = new_address;
+        }
+        else
+        {
+            state.ram_location_counter = new_address;
+        }
+
         // Create or switch to section at this address.
+        return ensure_section(state, new_address);
+    }
+
+    auto codegen::first_pass_rom (
+        codegen_state& state,
+        ast_dir_rom& rom
+    ) -> g10::result<void>
+    {
+        // - If not in the ROM region, save the current RAM location counter.
+        if (!state.in_rom_region)
+        {
+            state.ram_location_counter = state.location_counter;
+        }
+
+        // - Switch to ROM region.
+        state.in_rom_region = true;
+        state.location_counter = state.rom_location_counter;
+
+        // - Ensure section exists at the new location.
+        return ensure_section(state, state.location_counter);
+    }
+
+    auto codegen::first_pass_ram (
+        codegen_state& state,
+        ast_dir_ram& ram
+    ) -> g10::result<void>
+    {
+        // - If in the ROM region, save the current ROM location counter.
+        if (state.in_rom_region)
+        {
+            state.rom_location_counter = state.location_counter;
+        }
+
+        // - Switch to RAM region.
+        state.in_rom_region = false;
+        state.location_counter = state.ram_location_counter;
+
+        // - Ensure section exists at the new location.
+        return ensure_section(state, state.location_counter);
+    }
+
+    auto codegen::first_pass_int (
+        codegen_state& state,
+        ast_dir_int& int_
+    ) -> g10::result<void>
+    {
+        // - Interrupt vectors are in ROM region ($1000 - $1FFF).
+        //   Each vector occupies 0x80 bytes, starting at $1000.
+
+        // - If not in the ROM region, save the current RAM location counter.
+        if (!state.in_rom_region)
+        {
+            state.ram_location_counter = state.location_counter;
+        }
+
+        // - Evaluate the vector number expression.
+        if (!int_.vector_expression)
+        {
+            return g10::error(".int directive missing vector number ({}:{}:{})",
+                int_.source_file,
+                int_.source_line,
+                int_.source_column);
+        }
+
+        auto result = evaluate_expression(state, *int_.vector_expression);
+        if (!result.has_value())
+        {
+            return g10::error(".int directive: {} ({}:{}:{})",
+                result.error(),
+                int_.source_file,
+                int_.source_line,
+                int_.source_column);
+        }
+
+        // - Convert to integer.
+        std::int64_t vector_num = 0;
+        const value& val = result.value();
+
+        if (std::holds_alternative<std::int64_t>(val))
+        {
+            vector_num = std::get<std::int64_t>(val);
+        }
+        else if (std::holds_alternative<std::uint32_t>(val))
+        {
+            vector_num = static_cast<std::int64_t>(std::get<std::uint32_t>(val));
+        }
+        else
+        {
+            return g10::error(".int requires integer vector number ({}:{}:{})",
+                int_.source_file,
+                int_.source_line,
+                int_.source_column);
+        }
+
+        // - Validate vector number is in range [0, 31].
+        if (vector_num < 0 || vector_num > 31)
+        {
+            return g10::error(".int vector number must be 0-31, got {} ({}:{}:{})",
+                vector_num,
+                int_.source_file,
+                int_.source_line,
+                int_.source_column);
+        }
+
+        // - Calculate the interrupt vector address: $1000 + (vector * 0x80).
+        constexpr std::uint32_t IVT_START = 0x00001000;
+        constexpr std::uint32_t VECTOR_SIZE = 0x80;
+        std::uint32_t new_address = IVT_START + 
+            (static_cast<std::uint32_t>(vector_num) * VECTOR_SIZE);
+
+        // - Switch to ROM region and set location counter.
+        state.in_rom_region = true;
+        state.location_counter = new_address;
+        state.rom_location_counter = new_address;
+
+        // - Ensure section exists at the new location.
         return ensure_section(state, new_address);
     }
 
@@ -466,6 +635,8 @@ namespace g10asm
     {
         // Reset the location counter and section index for second pass.
         state.location_counter = 0x00002000;
+        state.rom_location_counter = 0x00002000;
+        state.ram_location_counter = 0x80000000;
         state.current_section_index = 0;
         state.in_rom_region = true;
 
@@ -499,6 +670,39 @@ namespace g10asm
                 {
                     auto& org = static_cast<ast_dir_org&>(*child);
                     if (auto result = second_pass_org(state, org);
+                        !result.has_value())
+                    {
+                        return result;
+                    }
+                    break;
+                }
+
+                case ast_node_type::dir_rom:
+                {
+                    auto& rom = static_cast<ast_dir_rom&>(*child);
+                    if (auto result = second_pass_rom(state, rom);
+                        !result.has_value())
+                    {
+                        return result;
+                    }
+                    break;
+                }
+
+                case ast_node_type::dir_ram:
+                {
+                    auto& ram = static_cast<ast_dir_ram&>(*child);
+                    if (auto result = second_pass_ram(state, ram);
+                        !result.has_value())
+                    {
+                        return result;
+                    }
+                    break;
+                }
+
+                case ast_node_type::dir_int:
+                {
+                    auto& int_ = static_cast<ast_dir_int&>(*child);
+                    if (auto result = second_pass_int(state, int_);
                         !result.has_value())
                     {
                         return result;
@@ -636,6 +840,167 @@ namespace g10asm
             org.source_file,
             org.source_line,
             org.source_column);
+    }
+
+    auto codegen::second_pass_rom (
+        codegen_state& state,
+        ast_dir_rom& rom
+    ) -> g10::result<void>
+    {
+        // - If not in the ROM region, save the current RAM location counter.
+        if (!state.in_rom_region)
+        {
+            state.ram_location_counter = state.location_counter;
+        }
+
+        // - Switch to ROM region.
+        state.in_rom_region = true;
+        state.location_counter = state.rom_location_counter;
+
+        // - Find the section that contains this address.
+        const auto& sections = state.object.get_sections();
+        for (std::size_t i = 0; i < sections.size(); ++i)
+        {
+            const auto& section = sections[i];
+            if (section.virtual_address == state.location_counter)
+            {
+                state.current_section_index = i;
+                return {};
+            }
+        }
+
+        // Section not found - this shouldn't happen if first pass ran correctly.
+        return g10::error("Internal error: section at 0x{:08X} not found for .rom ({}:{}:{})",
+            state.location_counter,
+            rom.source_file,
+            rom.source_line,
+            rom.source_column);
+    }
+
+    auto codegen::second_pass_ram (
+        codegen_state& state,
+        ast_dir_ram& ram
+    ) -> g10::result<void>
+    {
+        // - If in the ROM region, save the current ROM location counter.
+        if (state.in_rom_region)
+        {
+            state.rom_location_counter = state.location_counter;
+        }
+
+        // - Switch to RAM region.
+        state.in_rom_region = false;
+        state.location_counter = state.ram_location_counter;
+
+        // - Find the section that contains this address.
+        const auto& sections = state.object.get_sections();
+        for (std::size_t i = 0; i < sections.size(); ++i)
+        {
+            const auto& section = sections[i];
+            if (section.virtual_address == state.location_counter)
+            {
+                state.current_section_index = i;
+                return {};
+            }
+        }
+
+        // Section not found - this shouldn't happen if first pass ran correctly.
+        return g10::error("Internal error: section at 0x{:08X} not found for .ram ({}:{}:{})",
+            state.location_counter,
+            ram.source_file,
+            ram.source_line,
+            ram.source_column);
+    }
+
+    auto codegen::second_pass_int (
+        codegen_state& state,
+        ast_dir_int& int_
+    ) -> g10::result<void>
+    {
+        // - If not in the ROM region, save the current RAM location counter.
+        if (!state.in_rom_region)
+        {
+            state.ram_location_counter = state.location_counter;
+        }
+
+        // - Evaluate the vector number expression (same as first pass).
+        if (!int_.vector_expression)
+        {
+            return g10::error(".int directive missing vector number ({}:{}:{})",
+                int_.source_file,
+                int_.source_line,
+                int_.source_column);
+        }
+
+        auto result = evaluate_expression(state, *int_.vector_expression);
+        if (!result.has_value())
+        {
+            return g10::error(".int directive: {} ({}:{}:{})",
+                result.error(),
+                int_.source_file,
+                int_.source_line,
+                int_.source_column);
+        }
+
+        // - Convert to integer.
+        std::int64_t vector_num = 0;
+        const value& val = result.value();
+
+        if (std::holds_alternative<std::int64_t>(val))
+        {
+            vector_num = std::get<std::int64_t>(val);
+        }
+        else if (std::holds_alternative<std::uint32_t>(val))
+        {
+            vector_num = static_cast<std::int64_t>(std::get<std::uint32_t>(val));
+        }
+        else
+        {
+            return g10::error(".int requires integer vector number ({}:{}:{})",
+                int_.source_file,
+                int_.source_line,
+                int_.source_column);
+        }
+
+        // - Validate vector number is in range [0, 31].
+        if (vector_num < 0 || vector_num > 31)
+        {
+            return g10::error(".int vector number must be 0-31, got {} ({}:{}:{})",
+                vector_num,
+                int_.source_file,
+                int_.source_line,
+                int_.source_column);
+        }
+
+        // - Calculate the interrupt vector address: $1000 + (vector * 0x80).
+        constexpr std::uint32_t IVT_START = 0x00001000;
+        constexpr std::uint32_t VECTOR_SIZE = 0x80;
+        std::uint32_t new_address = IVT_START + 
+            (static_cast<std::uint32_t>(vector_num) * VECTOR_SIZE);
+
+        // - Switch to ROM region and set location counter.
+        state.in_rom_region = true;
+        state.location_counter = new_address;
+        state.rom_location_counter = new_address;
+
+        // - Find the section that contains this address.
+        const auto& sections = state.object.get_sections();
+        for (std::size_t i = 0; i < sections.size(); ++i)
+        {
+            const auto& section = sections[i];
+            if (section.virtual_address == new_address)
+            {
+                state.current_section_index = i;
+                return {};
+            }
+        }
+
+        // Section not found - this shouldn't happen if first pass ran correctly.
+        return g10::error("Internal error: section at 0x{:08X} not found for .int ({}:{}:{})",
+            new_address,
+            int_.source_file,
+            int_.source_line,
+            int_.source_column);
     }
 
     auto codegen::second_pass_byte (
@@ -2099,23 +2464,21 @@ namespace g10asm
                         instr.source_column);
                 }
 
-                // Evaluate address.
-                auto result = evaluate_as_address(state, *dir_node.address);
-                if (!result.has_value())
-                {
-                    return g10::error("Invalid address: {} at {}:{}:{}",
-                        result.error(),
-                        instr.source_file,
-                        instr.source_line,
-                        instr.source_column);
-                }
-
-                std::uint32_t addr = result.value();
-
                 // Check for Quick (LDQ) or Port (LDP) addressing.
                 if (instr.instruction == g10::instruction::ldq)
                 {
                     // LDQ: 16-bit relative to $FFFF0000
+                    // Evaluate address.
+                    auto result = evaluate_as_address(state, *dir_node.address);
+                    if (!result.has_value())
+                    {
+                        return g10::error("Invalid address: {} at {}:{}:{}",
+                            result.error(),
+                            instr.source_file,
+                            instr.source_line,
+                            instr.source_column);
+                    }
+                    std::uint32_t addr = result.value();
                     switch (size_class)
                     {
                         case 0: opcode = 0x1300 | (dest_idx << 4); break;
@@ -2128,6 +2491,16 @@ namespace g10asm
                 else if (instr.instruction == g10::instruction::ldp)
                 {
                     // LDP: 8-bit relative to $FFFFFF00 (byte only)
+                    auto result = evaluate_as_address(state, *dir_node.address);
+                    if (!result.has_value())
+                    {
+                        return g10::error("Invalid address: {} at {}:{}:{}",
+                            result.error(),
+                            instr.source_file,
+                            instr.source_line,
+                            instr.source_column);
+                    }
+                    std::uint32_t addr = result.value();
                     opcode = 0x1500 | (dest_idx << 4);
                     emit_word(state, opcode);
                     emit_byte(state, static_cast<std::uint8_t>(addr & 0xFF));
@@ -2142,7 +2515,66 @@ namespace g10asm
                         case 2: opcode = 0x3100 | (dest_idx << 4); break;
                     }
                     emit_word(state, opcode);
-                    emit_dword(state, addr);
+
+                    // Check if the address references an external symbol.
+                    bool needs_reloc = references_external(state, *dir_node.address);
+                    if (needs_reloc)
+                    {
+                        // Find the external symbol name.
+                        std::string symbol_name;
+                        if (dir_node.address->type == ast_node_type::expr_primary)
+                        {
+                            const auto& primary = 
+                                static_cast<const ast_expr_primary&>(*dir_node.address);
+                            if (std::holds_alternative<std::string_view>(primary.value))
+                            {
+                                symbol_name = std::string { 
+                                    std::get<std::string_view>(primary.value) };
+                            }
+                            else
+                            {
+                                symbol_name = std::string { primary.lexeme };
+                            }
+                        }
+
+                        // Emit placeholder FIRST (so offset is valid for relocation).
+                        emit_dword(state, 0x00000000);
+
+                        // Create relocation for 32-bit absolute address.
+                        auto symbol_index = state.object.find_symbol(symbol_name);
+                        if (!symbol_index.has_value())
+                        {
+                            return g10::error("Cannot create relocation: symbol '{}' not found",
+                                symbol_name);
+                        }
+
+                        g10::object_relocation reloc;
+                        reloc.offset = current_section_offset(state) - 4;
+                        reloc.symbol_index = static_cast<std::uint32_t>(symbol_index.value());
+                        reloc.section_index = static_cast<std::uint32_t>(state.current_section_index);
+                        reloc.type = g10::relocation_type::abs32;
+                        reloc.addend = 0;
+
+                        auto result = state.object.add_relocation(reloc);
+                        if (!result.has_value())
+                        {
+                            return g10::error("Failed to add relocation: {}", result.error());
+                        }
+                    }
+                    else
+                    {
+                        // Evaluate address.
+                        auto result = evaluate_as_address(state, *dir_node.address);
+                        if (!result.has_value())
+                        {
+                            return g10::error("Invalid address: {} at {}:{}:{}",
+                                result.error(),
+                                instr.source_file,
+                                instr.source_line,
+                                instr.source_column);
+                        }
+                        emit_dword(state, result.value());
+                    }
                 }
                 return {};
             }
@@ -2504,6 +2936,16 @@ namespace g10asm
                     static_cast<const ast_opr_register&>(*instr.operands[0]);
                 const std::uint8_t reg_idx = get_register_index(reg_node.reg);
 
+                // Make sure the register is a dword register.
+                const std::uint8_t reg_size = get_register_size_class(reg_node.reg);
+                if (reg_size != 2)
+                {
+                    return g10::error("POP requires dword register at {}:{}:{}",
+                        instr.source_file,
+                        instr.source_line,
+                        instr.source_column);
+                }
+
                 opcode = 0x3600 | (reg_idx << 4);
                 emit_word(state, opcode);
                 return {};
@@ -2562,6 +3004,16 @@ namespace g10asm
                 const auto& reg_node = 
                     static_cast<const ast_opr_register&>(*instr.operands[0]);
                 const std::uint8_t reg_idx = get_register_index(reg_node.reg);
+
+                // Make sure the register is a dword register.
+                const std::uint8_t reg_size = get_register_size_class(reg_node.reg);
+                if (reg_size != 2)  
+                {
+                    return g10::error("PUSH requires dword register at {}:{}:{}",
+                        instr.source_file,
+                        instr.source_line,
+                        instr.source_column);
+                }
 
                 opcode = 0x3C00 | reg_idx;
                 emit_word(state, opcode);
@@ -2803,19 +3255,68 @@ namespace g10asm
                         instr.source_column);
                 }
 
-                auto result = evaluate_as_address(state, *imm_node.value);
-                if (!result.has_value())
-                {
-                    return g10::error("Invalid call target: {} at {}:{}:{}",
-                        result.error(),
-                        instr.source_file,
-                        instr.source_line,
-                        instr.source_column);
-                }
-
                 opcode = 0x4300 | (condition << 4);
                 emit_word(state, opcode);
-                emit_dword(state, result.value());
+
+                // Check if the address references an external symbol.
+                bool needs_reloc = references_external(state, *imm_node.value);
+                if (needs_reloc)
+                {
+                    // Find the external symbol name.
+                    std::string symbol_name;
+                    if (imm_node.value->type == ast_node_type::expr_primary)
+                    {
+                        const auto& primary = 
+                            static_cast<const ast_expr_primary&>(*imm_node.value);
+                        if (std::holds_alternative<std::string_view>(primary.value))
+                        {
+                            symbol_name = std::string { 
+                                std::get<std::string_view>(primary.value) };
+                        }
+                        else
+                        {
+                            symbol_name = std::string { primary.lexeme };
+                        }
+                    }
+
+                    // Emit placeholder FIRST (so offset is valid for relocation).
+                    emit_dword(state, 0x00000000);
+
+                    // Create relocation for 32-bit absolute address.
+                    // Offset is 4 bytes back from current position.
+                    auto symbol_index = state.object.find_symbol(symbol_name);
+                    if (!symbol_index.has_value())
+                    {
+                        return g10::error("Cannot create relocation: symbol '{}' not found",
+                            symbol_name);
+                    }
+
+                    g10::object_relocation reloc;
+                    reloc.offset = current_section_offset(state) - 4;  // Point to the dword we just emitted
+                    reloc.symbol_index = static_cast<std::uint32_t>(symbol_index.value());
+                    reloc.section_index = static_cast<std::uint32_t>(state.current_section_index);
+                    reloc.type = g10::relocation_type::abs32;
+                    reloc.addend = 0;
+
+                    auto result = state.object.add_relocation(reloc);
+                    if (!result.has_value())
+                    {
+                        return g10::error("Failed to add relocation: {}", result.error());
+                    }
+                }
+                else
+                {
+                    auto result = evaluate_as_address(state, *imm_node.value);
+                    if (!result.has_value())
+                    {
+                        return g10::error("Invalid call target: {} at {}:{}:{}",
+                            result.error(),
+                            instr.source_file,
+                            instr.source_line,
+                            instr.source_column);
+                    }
+                    emit_dword(state, result.value());
+                }
                 return {};
             }
 
@@ -3627,6 +4128,227 @@ namespace g10asm
         // - G10 instructions have a 2-byte opcode.
         std::size_t size = 2;
 
+        // - Determine the immediate operand size based on instruction type.
+        //   Most instructions use 32-bit immediates, but some use smaller sizes:
+        //   - JPB/JR: 16-bit signed offset
+        //   - LDQ/STQ: 16-bit address (relative to $FFFF0000)
+        //   - LDP/STP: 8-bit address (relative to $FFFFFF00)
+        //   - Arithmetic/Logic with immediate: depends on register size
+        std::size_t immediate_size = 4;  // Default to 32-bit
+        
+        switch (instr.instruction)
+        {
+            case g10::instruction::ld:
+            {
+                // If operand two is an immediate, then the immediate size will
+                // depend on the size of the destination register.
+                if (
+                    instr.operands.size() >= 2 &&
+                    instr.operands[1]->type == ast_node_type::opr_immediate
+                )
+                {
+                    const auto& dest_operand = *instr.operands[0];
+                    if (dest_operand.type == ast_node_type::opr_register)
+                    {
+                        const auto& reg_node = 
+                            static_cast<const ast_opr_register&>(dest_operand);
+                        const std::uint8_t size_class = get_register_size_class(reg_node.reg);
+
+                        switch (size_class)
+                        {
+                            case 0: immediate_size = 1; break; // 8-bit
+                            case 1: immediate_size = 2; break; // 16-bit
+                            case 2: immediate_size = 4; break; // 32-bit
+                        }
+                    }
+                }
+
+                // If operand two is an address, then immediate size is 4 bytes.
+                else if (
+                    instr.operands.size() >= 2 &&
+                    instr.operands[1]->type == ast_node_type::opr_direct
+                )
+                {
+                    immediate_size = 4;
+                }
+            } break;
+
+            case g10::instruction::st:
+            {
+                // ST [ADDR32], reg - 4 bytes for address
+                // ST [indirect], reg - 0 bytes (register in opcode)
+                if (
+                    instr.operands.size() >= 1 &&
+                    instr.operands[0]->type == ast_node_type::opr_direct
+                )
+                {
+                    immediate_size = 4;
+                }
+                else
+                {
+                    immediate_size = 0;
+                }
+            } break;
+
+            // Arithmetic and logic instructions with immediate operand
+            // size depends on the accumulator register size.
+            case g10::instruction::add:
+            case g10::instruction::adc:
+            case g10::instruction::sub:
+            case g10::instruction::sbc:
+            case g10::instruction::and_:
+            case g10::instruction::or_:
+            case g10::instruction::xor_:
+            case g10::instruction::cmp:
+            case g10::instruction::cp:
+            {
+                // Check if second operand is an immediate.
+                if (
+                    instr.operands.size() >= 2 &&
+                    instr.operands[1]->type == ast_node_type::opr_immediate
+                )
+                {
+                    // Size depends on the destination register.
+                    const auto& dest_operand = *instr.operands[0];
+                    if (dest_operand.type == ast_node_type::opr_register)
+                    {
+                        const auto& reg_node = 
+                            static_cast<const ast_opr_register&>(dest_operand);
+                        const std::uint8_t size_class = get_register_size_class(reg_node.reg);
+
+                        switch (size_class)
+                        {
+                            case 0: immediate_size = 1; break; // 8-bit
+                            case 1: immediate_size = 2; break; // 16-bit
+                            case 2: immediate_size = 4; break; // 32-bit
+                        }
+                    }
+                }
+                else
+                {
+                    // Register-to-register: no immediate.
+                    immediate_size = 0;
+                }
+            } break;
+
+            // Move instructions: no immediate data.
+            case g10::instruction::mv:
+            case g10::instruction::mwh:
+            case g10::instruction::mwl:
+            case g10::instruction::swap:
+                immediate_size = 0;
+                break;
+
+            // Increment/Decrement: no immediate data.
+            case g10::instruction::inc:
+            case g10::instruction::dec:
+                immediate_size = 0;
+                break;
+
+            // Shift/Rotate instructions: no immediate data.
+            case g10::instruction::sla:
+            case g10::instruction::sra:
+            case g10::instruction::srl:
+            case g10::instruction::rl:
+            case g10::instruction::rr:
+            case g10::instruction::rlc:
+            case g10::instruction::rrc:
+            case g10::instruction::rla:
+            case g10::instruction::rra:
+            case g10::instruction::rlca:
+            case g10::instruction::rrca:
+                immediate_size = 0;
+                break;
+
+            // Bitwise NOT: no immediate data.
+            case g10::instruction::not_:
+            case g10::instruction::cpl:
+                immediate_size = 0;
+                break;
+
+            // Stack operations: no immediate data.
+            case g10::instruction::push:
+            case g10::instruction::pop:
+            case g10::instruction::spo:
+            case g10::instruction::spi:
+                immediate_size = 0;
+                break;
+
+            // Return instructions: no immediate data.
+            case g10::instruction::ret:
+            case g10::instruction::reti:
+                immediate_size = 0;
+                break;
+
+            // Control instructions: no immediate data.
+            case g10::instruction::nop:
+            case g10::instruction::stop:
+            case g10::instruction::halt:
+            case g10::instruction::ei:
+            case g10::instruction::di:
+            case g10::instruction::daa:
+            case g10::instruction::scf:
+            case g10::instruction::ccf:
+                immediate_size = 0;
+                break;
+
+            // JPB/JR: 16-bit signed offset.
+            case g10::instruction::jpb:
+            case g10::instruction::jr:
+                immediate_size = 2;
+                break;
+
+            // JMP: 32-bit address if not register indirect.
+            case g10::instruction::jmp:
+                if (instr.operands.size() >= 1)
+                {
+                    const auto& target_operand = *instr.operands[0];
+                    if (target_operand.type == ast_node_type::opr_direct)
+                    {
+                        immediate_size = 4;
+                    }
+                    else
+                    {
+                        immediate_size = 0; // Register indirect
+                    }
+                }
+                break;
+
+            // CALL: 32-bit address.
+            case g10::instruction::call:
+                immediate_size = 4;
+                break;
+
+            // INT: 8-bit interrupt number (but encoded in opcode for some variants).
+            case g10::instruction::int_:
+                immediate_size = 0;  // Interrupt number is in the opcode.
+                break;
+            
+            case g10::instruction::ldq:
+            case g10::instruction::stq:
+                // LDQ/STQ use 16-bit addresses relative to $FFFF0000.
+                immediate_size = 2;
+                break;
+            
+            case g10::instruction::ldp:
+            case g10::instruction::stp:
+                // LDP/STP use 8-bit addresses relative to $FFFFFF00.
+                // The 8-bit port address is encoded in the opcode itself.
+                immediate_size = 0;
+                break;
+
+            // Bit operations: immediate bit number may be encoded in opcode.
+            case g10::instruction::bit:
+            case g10::instruction::set:
+            case g10::instruction::res:
+                immediate_size = 0;
+                break;
+            
+            default:
+                // Default to 32-bit for unknown instructions.
+                break;
+        }
+
         // - Add operand sizes.
         for (const auto& operand : instr.operands)
         {
@@ -3639,9 +4361,8 @@ namespace g10asm
             switch (operand->type)
             {
                 case ast_node_type::opr_immediate:
-                    // - Immediate values: varies by instruction, assume 4 bytes
-                    //   (will be refined in second pass).
-                    size += 4;
+                    // - Immediate values: size depends on instruction type.
+                    size += immediate_size;
                     break;
 
                 case ast_node_type::opr_register:
@@ -3650,8 +4371,24 @@ namespace g10asm
                     break;
 
                 case ast_node_type::opr_direct:
-                    // - Direct memory address: 4 bytes.
-                    size += 4;
+                    // - Direct memory address: size depends on instruction type.
+                    //   - LD/ST: 4 bytes (32-bit address)
+                    //   - LDQ/STQ: 2 bytes (16-bit relative address)
+                    //   - LDP/STP: 0 bytes (8-bit port in opcode itself)
+                    switch (instr.instruction)
+                    {
+                        case g10::instruction::ldq:
+                        case g10::instruction::stq:
+                            size += 2;
+                            break;
+                        case g10::instruction::ldp:
+                        case g10::instruction::stp:
+                            // Port address is encoded in the opcode itself.
+                            break;
+                        default:
+                            size += 4;
+                            break;
+                    }
                     break;
 
                 case ast_node_type::opr_indirect:

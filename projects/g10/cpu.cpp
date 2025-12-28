@@ -332,6 +332,65 @@ namespace g10
             }
         }
 
+        // - Print a message indicating the exception.
+        switch (code)
+        {
+            case EC_INVALID_INSTRUCTION:
+                std::println("Illegal instruction '0x{:04X}' at address ${:08X}",
+                    m_opcode, m_opcode_address);
+                break;
+            case EC_INVALID_ARGUMENT:
+                std::println("Instruction '0x{:04X}' at address ${:08X} "
+                    "received an invalid argument",
+                    m_opcode, m_opcode_address);
+                break;
+            case EC_INVALID_READ_ACCESS:
+                std::println("Instruction '0x{:04X}' at address ${:08X} "
+                    "attempted reading from invalid memory address '${:08X}'",
+                    m_opcode, m_opcode_address, m_fetch_address);
+                break;
+            case EC_INVALID_WRITE_ACCESS:
+                std::println("Instruction '0x{:04X}' at address ${:08X} "
+                    "attempted writing to invalid memory address '${:08X}'",
+                    m_opcode, m_opcode_address, m_fetch_address);   
+                break;
+            case EC_INVALID_EXECUTE_ACCESS:
+                std::println("Attempted to execute instruction at invalid address "
+                    "'${:08X}'", m_fetch_address);
+                break;
+            case EC_DIVIDE_BY_ZERO:
+                std::println("Divide by zero error in instruction '0x{:04X}' "
+                    "at address ${:08X}",
+                    m_opcode, m_opcode_address);
+                break;
+            case EC_STACK_OVERFLOW:
+                std::println("Stack overflow in instruction '0x{:04X}' "
+                    "at address ${:08X}",
+                    m_opcode, m_opcode_address);
+                break;
+            case EC_STACK_UNDERFLOW:
+                std::println("Stack underflow in instruction '0x{:04X}' "
+                    "at address ${:08X}",
+                    m_opcode, m_opcode_address);
+                break;
+            case EC_HARDWARE_ERROR:
+                std::println("Hardware error occurred during instruction "
+                    "'0x{:04X}' at address ${:08X}",
+                    m_opcode, m_opcode_address);
+                break;
+            case EC_DOUBLE_FAULT:
+                std::println("Double Fault exception explicitly raised.");
+                break;
+            default:
+                std::println("CPU Exception Raised: EC={:02X}", static_cast<std::uint8_t>(code));
+                break;
+        }
+
+        if (m_double_fault == true)
+        {
+            std::println("Double Fault condition encountered. System halted.");
+        }
+
         return false;
     }
 
@@ -351,6 +410,16 @@ namespace g10
     auto cpu::consume_machine_cycles (std::uint32_t m_cycles) -> bool
     {
         return consume_tick_cycles(m_cycles * 4);
+    }
+
+    auto cpu::request_interrupt (std::uint8_t vector) -> void
+    {
+        // - Set the corresponding bit in the `IRQ` register to request the
+        //   interrupt.
+        if (vector < 32)
+        {
+            m_regs.irq |= (1 << vector);
+        }
     }
 }
 
@@ -1169,9 +1238,10 @@ namespace g10
         if (push_dword(m_regs.pc) == false)
             { return false; }
 
-        // - Move the `PC` to the interrupt handler address from the IVT.
+        // - Move the `PC` to the interrupt handler address.
+        //   The handler address is calculated as IVT_START + (vector * 0x80).
         //   Consume 1 M-cycle for the jump.
-        m_regs.pc = m_bus.read(IVT_START + (vector * 4));
+        m_regs.pc = IVT_START + (static_cast<std::uint32_t>(vector) * 0x80);
         return consume_machine_cycles(1);
     }
 

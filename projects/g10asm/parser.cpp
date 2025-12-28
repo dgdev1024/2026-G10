@@ -369,6 +369,15 @@ namespace g10asm
             case directive_type::org:
                 return parse_dir_org(lex, dir_tk);
 
+            case directive_type::rom:
+                return parse_dir_rom(lex, dir_tk);
+
+            case directive_type::ram:
+                return parse_dir_ram(lex, dir_tk);
+
+            case directive_type::int_:
+                return parse_dir_int(lex, dir_tk);
+
             case directive_type::byte:
                 return parse_dir_byte(lex, dir_tk);
 
@@ -430,6 +439,78 @@ namespace g10asm
         org_node->address_expression = std::move(address_expr_result.value());
 
         return org_node;
+    }
+
+    auto parser::parse_dir_rom (lexer& lex, const token& dir_tk) 
+        -> g10::result_uptr<ast_node>
+    {
+        // - Create the AST node for the `.rom` directive.
+        auto rom_node = std::make_unique<ast_dir_rom>(dir_tk);
+        if (rom_node->valid == false)
+        {
+            return g10::error(
+                " - Failed to create AST node for `.rom` directive.\n"
+                " - In file '{}:{}:{}'",
+                dir_tk.source_file,
+                dir_tk.source_line,
+                dir_tk.source_column
+            );
+        }
+
+        return rom_node;
+    }
+
+    auto parser::parse_dir_ram (lexer& lex, const token& dir_tk) 
+        -> g10::result_uptr<ast_node>
+    {
+        // - Create the AST node for the `.ram` directive.
+        auto ram_node = std::make_unique<ast_dir_ram>(dir_tk);
+        if (ram_node->valid == false)
+        {
+            return g10::error(
+                " - Failed to create AST node for `.ram` directive.\n"
+                " - In file '{}:{}:{}'",
+                dir_tk.source_file,
+                dir_tk.source_line,
+                dir_tk.source_column
+            );
+        }
+
+        return ram_node;
+    }
+
+    auto parser::parse_dir_int (lexer& lex, const token& dir_tk) 
+        -> g10::result_uptr<ast_node>
+    {
+        // - Create the AST node for the `.int` directive.
+        auto int_node = std::make_unique<ast_dir_int>(dir_tk);
+        if (int_node->valid == false)
+        {
+            return g10::error(
+                " - Failed to create AST node for `.int` directive.\n"
+                " - In file '{}:{}:{}'",
+                dir_tk.source_file,
+                dir_tk.source_line,
+                dir_tk.source_column
+            );
+        }
+
+        // - Parse the interrupt vector number expression.
+        auto vector_result = parse_expression(lex);
+        if (!vector_result.has_value())
+        {
+            return g10::error(
+                " - Failed to parse interrupt vector number for `.int` directive: {}\n"
+                " - In file '{}:{}:{}'",
+                vector_result.error(),
+                dir_tk.source_file,
+                dir_tk.source_line,
+                dir_tk.source_column
+            );
+        }
+
+        int_node->vector_expression = std::move(vector_result.value());
+        return int_node;
     }
 
     auto parser::parse_dir_byte (lexer& lex, const token& dir_tk) 

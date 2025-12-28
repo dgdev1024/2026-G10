@@ -254,7 +254,7 @@ namespace g10
      */
     inline constexpr auto cond (std::uint16_t i) noexcept -> condition_code
     {
-        return static_cast<condition_code>(((i >> 8) & 0x7));
+        return static_cast<condition_code>(((i >> 4) & 0x7));
     }
 
 }
@@ -428,6 +428,14 @@ namespace g10
         auto consume_machine_cycles (std::uint32_t m_cycles) -> bool;
 
         /**
+         * @brief   Requests an interrupt by setting the corresponding bit in
+         *          the CPU's `IRQ` register.
+         * 
+         * @param   vector      The interrupt vector number (0-31) to request.
+         */
+        auto request_interrupt (std::uint8_t vector) -> void;
+
+        /**
          * @brief   Retrieves a constant reference to the CPU's register file,
          *          containing all general-purpose and special-purpose registers.
          * 
@@ -503,6 +511,51 @@ namespace g10
          */
         inline auto is_halted () const -> bool
             { return m_halted; }
+
+        /**
+         * @brief   Retrieves the current value of the CPU's Program Counter
+         *          (`PC`) register.
+         * 
+         * @return  The value of the `PC` register.
+         */
+        inline auto get_pc () const -> std::uint32_t
+            { return m_regs.pc; }
+
+        /**
+         * @brief   Retrieves the current value of the CPU's Stack Pointer
+         *          (`SP`) register.
+         * 
+         * @return  The value of the `SP` register.
+         */
+        inline auto get_sp () const -> std::uint32_t
+            { return m_regs.sp; }
+
+        /**
+         * @brief   Retrieves the current value of the CPU's Exception Code
+         *          (`EC`) register.
+         * 
+         * @return  The value of the `EC` register.
+         */
+        inline auto get_ec () const -> std::uint8_t
+            { return m_regs.ec; }
+
+        /**
+         * @brief   Sets the CPU's Program Counter (`PC`) register to the
+         *          specified address.
+         *
+         * @param   address     The address to set the `PC` register to.
+         */
+        inline auto set_pc (std::uint32_t address) -> void
+            { m_regs.pc = address; }
+
+        /**
+         * @brief   Sets the CPU's Stack Pointer (`SP`) register to the
+         *          specified address.
+         *
+         * @param   address     The address to set the `SP` register to.
+         */
+        inline auto set_sp (std::uint32_t address) -> void
+            { m_regs.sp = address; }
 
     public: /* Public Methods - Hardware Registers ****************************/
 
