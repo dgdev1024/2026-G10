@@ -126,6 +126,66 @@ namespace g10asm
                 node.symbols[i]);
         }
         return result;
+    }
+
+    auto ast_to_string (const ast_dir_let& node, int indent)
+        -> std::string
+    {
+        std::string result = std::format("{}.let directive: ${}\n", i(indent),
+            node.variable_name);
+        if (node.init_expression)
+        {
+            result += std::format("{}value:\n", i(indent + 1));
+            result += ast_to_string(*node.init_expression, indent + 2);
+        }
+        return result;
+    }
+
+    auto ast_to_string (const ast_dir_const& node, int indent)
+        -> std::string
+    {
+        std::string result = std::format("{}.const directive: ${}\n", i(indent),
+            node.constant_name);
+        if (node.value_expression)
+        {
+            result += std::format("{}value:\n", i(indent + 1));
+            result += ast_to_string(*node.value_expression, indent + 2);
+        }
+        return result;
+    }
+
+    auto ast_to_string (const ast_stmt_var_assignment& node, int indent)
+        -> std::string
+    {
+        std::string result = std::format("{}variable assignment: ${}\n", i(indent),
+            node.variable_name);
+        
+        // Map operator type to string
+        std::string_view op_str = "?=";
+        switch (node.assignment_operator)
+        {
+            case token_type::assign_equal:       op_str = "="; break;
+            case token_type::assign_plus:        op_str = "+="; break;
+            case token_type::assign_minus:       op_str = "-="; break;
+            case token_type::assign_times:       op_str = "*="; break;
+            case token_type::assign_divide:      op_str = "/="; break;
+            case token_type::assign_modulo:      op_str = "%="; break;
+            case token_type::assign_and:         op_str = "&="; break;
+            case token_type::assign_or:          op_str = "|="; break;
+            case token_type::assign_xor:         op_str = "^="; break;
+            case token_type::assign_shift_left:  op_str = "<<="; break;
+            case token_type::assign_shift_right: op_str = ">>="; break;
+            case token_type::assign_exponent:    op_str = "**="; break;
+            default: break;
+        }
+        result += std::format("{}operator: {}\n", i(indent + 1), op_str);
+        
+        if (node.value_expression)
+        {
+            result += std::format("{}value:\n", i(indent + 1));
+            result += ast_to_string(*node.value_expression, indent + 2);
+        }
+        return result;
     }   
 
     auto ast_to_string (const ast_opr_immediate& node, 
@@ -282,6 +342,12 @@ namespace g10asm
                 return ast_to_string(static_cast<const ast_dir_global&>(node), indent);
             case ast_node_type::dir_extern:
                 return ast_to_string(static_cast<const ast_dir_extern&>(node), indent);
+            case ast_node_type::dir_let:
+                return ast_to_string(static_cast<const ast_dir_let&>(node), indent);
+            case ast_node_type::dir_const:
+                return ast_to_string(static_cast<const ast_dir_const&>(node), indent);
+            case ast_node_type::stmt_var_assignment:
+                return ast_to_string(static_cast<const ast_stmt_var_assignment&>(node), indent);
             case ast_node_type::opr_immediate:
                 return ast_to_string(static_cast<const ast_opr_immediate&>(node), indent);
             case ast_node_type::opr_register:

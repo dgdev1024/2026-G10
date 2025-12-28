@@ -9,6 +9,7 @@
 
 /* Private Includes ***********************************************************/
 
+#include <g10asm/environment.hpp>
 #include <g10asm/codegen.hpp>
 
 /* Private Constants and Enumerations *****************************************/
@@ -41,8 +42,23 @@ namespace g10asm
         // - Create the codegen state.
         codegen_state state;
 
+        // - Clear the environment from any previous assembly runs.
+        environment::clear();
+
         // - Set the object file flags (will be finalized later).
         state.object.set_flags(g10::object_flags::relocatable);
+
+        // Variable Pass:
+        // - Process all `.let`, `.const`, and variable assignment statements.
+        // - This must be done before the first pass because variables can be
+        //   used in `.org` expressions and other places that affect address
+        //   calculation.
+        if (auto result = variable_pass(state, module); !result.has_value())
+        {
+            std::println(stderr,
+                "Variable pass code generation failed: {}", result.error());
+            return g10::error(result.error());
+        }
 
         // First Pass: 
         // - Collect symbols, create sections, assign addresses.
@@ -73,6 +89,319 @@ namespace g10asm
 
         // - Return the generated object file.
         return std::move(state.object);
+    }
+}
+
+/* Private Methods - Variable Pass ********************************************/
+
+namespace g10asm
+{
+    auto codegen::variable_pass (codegen_state& state, ast_module& module)
+        -> g10::result<void>
+    {
+        // - Process each node in the module, looking for variable-related
+        //   statements.
+        for (auto& child : module.children)
+        {
+            if (!child || !child->valid)
+            {
+                continue;
+            }
+
+            switch (child->type)
+            {
+                case ast_node_type::dir_let:
+                {
+                    auto& let_dir = static_cast<ast_dir_let&>(*child);
+                    if (auto result = variable_pass_let(state, let_dir);
+                        !result.has_value())
+                    {
+                        return result;
+                    }
+                    break;
+                }
+
+                case ast_node_type::dir_const:
+                {
+                    auto& const_dir = static_cast<ast_dir_const&>(*child);
+                    if (auto result = variable_pass_const(state, const_dir);
+                        !result.has_value())
+                    {
+                        return result;
+                    }
+                    break;
+                }
+
+                case ast_node_type::stmt_var_assignment:
+                {
+                    auto& assign_stmt = static_cast<ast_stmt_var_assignment&>(*child);
+                    if (auto result = variable_pass_assignment(state, assign_stmt);
+                        !result.has_value())
+                    {
+                        return result;
+                    }
+                    break;
+                }
+
+                default:
+                    // - Other node types are handled in subsequent passes.
+                    break;
+            }
+        }
+
+        return {};
+    }
+
+    auto codegen::variable_pass_let (
+        codegen_state& state,
+        ast_dir_let& let_dir
+    ) -> g10::result<void>
+    {
+        // - Evaluate the initialization expression.
+        auto init_result = evaluate_expression(state, *let_dir.init_expression);
+        if (!init_result.has_value())
+        {
+            return g10::error(
+                " - Failed to evaluate initialization expression for variable '${}': {}\n"
+                " - In file '{}:{}'",
+                let_dir.variable_name,
+                init_result.error(),
+                let_dir.source_file,
+                let_dir.source_line
+            );
+        }
+
+        // - Define the variable in the environment.
+        auto define_result = environment::define_variable(
+            std::string(let_dir.variable_name),
+            init_result.value(),
+            let_dir.source_file,
+            let_dir.source_line
+        );
+
+        if (!define_result.has_value())
+        {
+            return g10::error(
+                " - Failed to define variable '${}': {}\n"
+                " - In file '{}:{}'",
+                let_dir.variable_name,
+                define_result.error(),
+                let_dir.source_file,
+                let_dir.source_line
+            );
+        }
+
+        return {};
+    }
+
+    auto codegen::variable_pass_const (
+        codegen_state& state,
+        ast_dir_const& const_dir
+    ) -> g10::result<void>
+    {
+        // - Evaluate the value expression.
+        auto value_result = evaluate_expression(state, *const_dir.value_expression);
+        if (!value_result.has_value())
+        {
+            return g10::error(
+                " - Failed to evaluate value expression for constant '${}': {}\n"
+                " - In file '{}:{}'",
+                const_dir.constant_name,
+                value_result.error(),
+                const_dir.source_file,
+                const_dir.source_line
+            );
+        }
+
+        // - Define the constant in the environment.
+        auto define_result = environment::define_constant(
+            std::string(const_dir.constant_name),
+            value_result.value(),
+            const_dir.source_file,
+            const_dir.source_line
+        );
+
+        if (!define_result.has_value())
+        {
+            return g10::error(
+                " - Failed to define constant '${}': {}\n"
+                " - In file '{}:{}'",
+                const_dir.constant_name,
+                define_result.error(),
+                const_dir.source_file,
+                const_dir.source_line
+            );
+        }
+
+        return {};
+    }
+
+    auto codegen::variable_pass_assignment (
+        codegen_state& state,
+        ast_stmt_var_assignment& assign_stmt
+    ) -> g10::result<void>
+    {
+        const std::string var_name(assign_stmt.variable_name);
+
+        // - Check if the variable exists.
+        if (!environment::exists(var_name))
+        {
+            return g10::error(
+                " - Undefined variable '${}' in assignment.\n"
+                " - In file '{}:{}'",
+                var_name,
+                assign_stmt.source_file,
+                assign_stmt.source_line
+            );
+        }
+
+        // - Check if it's a constant (cannot be modified).
+        if (environment::is_constant(var_name))
+        {
+            return g10::error(
+                " - Cannot modify constant '${}' in assignment.\n"
+                " - In file '{}:{}'",
+                var_name,
+                assign_stmt.source_file,
+                assign_stmt.source_line
+            );
+        }
+
+        // - Get the current value.
+        auto current_result = environment::get_value(var_name);
+        if (!current_result.has_value())
+        {
+            return g10::error(current_result.error());
+        }
+
+        // - Evaluate the right-hand side expression.
+        auto rhs_result = evaluate_expression(state, *assign_stmt.value_expression);
+        if (!rhs_result.has_value())
+        {
+            return g10::error(
+                " - Failed to evaluate assignment expression for '${}': {}\n"
+                " - In file '{}:{}'",
+                var_name,
+                rhs_result.error(),
+                assign_stmt.source_file,
+                assign_stmt.source_line
+            );
+        }
+
+        // - Convert both values to integers for compound operations.
+        auto current_int_result = value_to_integer(current_result.value());
+        auto rhs_int_result = value_to_integer(rhs_result.value());
+
+        if (!current_int_result.has_value())
+        {
+            return g10::error(
+                " - Variable '${}' does not hold a numeric value.\n"
+                " - In file '{}:{}'",
+                var_name,
+                assign_stmt.source_file,
+                assign_stmt.source_line
+            );
+        }
+
+        if (!rhs_int_result.has_value())
+        {
+            return g10::error(
+                " - Assignment expression for '${}' does not evaluate to a numeric value.\n"
+                " - In file '{}:{}'",
+                var_name,
+                assign_stmt.source_file,
+                assign_stmt.source_line
+            );
+        }
+
+        std::int64_t current_int = current_int_result.value();
+        std::int64_t rhs_int = rhs_int_result.value();
+        std::int64_t new_value = 0;
+
+        // - Apply the assignment operator.
+        switch (assign_stmt.assignment_operator)
+        {
+            case token_type::assign_equal:
+                new_value = rhs_int;
+                break;
+            case token_type::assign_plus:
+                new_value = current_int + rhs_int;
+                break;
+            case token_type::assign_minus:
+                new_value = current_int - rhs_int;
+                break;
+            case token_type::assign_times:
+                new_value = current_int * rhs_int;
+                break;
+            case token_type::assign_divide:
+                if (rhs_int == 0)
+                {
+                    return g10::error(
+                        " - Division by zero in assignment to '${}'\n"
+                        " - In file '{}:{}'",
+                        var_name,
+                        assign_stmt.source_file,
+                        assign_stmt.source_line
+                    );
+                }
+                new_value = current_int / rhs_int;
+                break;
+            case token_type::assign_modulo:
+                if (rhs_int == 0)
+                {
+                    return g10::error(
+                        " - Modulo by zero in assignment to '${}'\n"
+                        " - In file '{}:{}'",
+                        var_name,
+                        assign_stmt.source_file,
+                        assign_stmt.source_line
+                    );
+                }
+                new_value = current_int % rhs_int;
+                break;
+            case token_type::assign_and:
+                new_value = current_int & rhs_int;
+                break;
+            case token_type::assign_or:
+                new_value = current_int | rhs_int;
+                break;
+            case token_type::assign_xor:
+                new_value = current_int ^ rhs_int;
+                break;
+            case token_type::assign_shift_left:
+                new_value = current_int << rhs_int;
+                break;
+            case token_type::assign_shift_right:
+                new_value = current_int >> rhs_int;
+                break;
+            case token_type::assign_exponent:
+            {
+                // - Compute exponentiation.
+                new_value = 1;
+                for (std::int64_t i = 0; i < rhs_int; ++i)
+                {
+                    new_value *= current_int;
+                }
+                break;
+            }
+            default:
+                return g10::error(
+                    " - Unknown assignment operator in assignment to '${}'\n"
+                    " - In file '{}:{}'",
+                    var_name,
+                    assign_stmt.source_file,
+                    assign_stmt.source_line
+                );
+        }
+
+        // - Update the variable in the environment.
+        auto set_result = environment::set_value(var_name, value{new_value});
+        if (!set_result.has_value())
+        {
+            return g10::error(set_result.error());
+        }
+
+        return {};
     }
 }
 
@@ -1673,11 +2002,43 @@ namespace g10asm
             }
 
             case ast_expr_primary::primary_type::variable:
+            {
+                // Variable: look up in the environment.
+                std::string var_name;
+                if (std::holds_alternative<std::string_view>(expr.value))
+                {
+                    var_name = std::string { std::get<std::string_view>(expr.value) };
+                }
+                else
+                {
+                    var_name = std::string { expr.lexeme };
+                }
+
+                // Remove the '$' prefix if present.
+                if (!var_name.empty() && var_name[0] == '$')
+                {
+                    var_name = var_name.substr(1);
+                }
+
+                // Look up in the environment.
+                auto value_result = environment::get_value(var_name);
+                if (!value_result.has_value())
+                {
+                    return g10::error("Undefined variable '${}' at {}:{}:{}",
+                        var_name,
+                        expr.source_file,
+                        expr.source_line,
+                        expr.source_column);
+                }
+
+                return value_result.value();
+            }
+
             case ast_expr_primary::primary_type::placeholder:
             {
-                // Variables and placeholders are for macro expansion.
+                // Placeholders are for macro expansion.
                 // Not supported in expression evaluation context.
-                return g10::error("Variables and placeholders not supported in "
+                return g10::error("Placeholders not supported in "
                     "expressions at {}:{}:{}",
                     expr.source_file,
                     expr.source_line,

@@ -44,6 +44,8 @@ namespace g10asm
         dword,      /** @brief The `.dword` directive defines or reserves one or more double words (4 bytes) of data. */
         global,     /** @brief The `.global` directive exports symbols for linking with other modules. */
         extern_,    /** @brief The `.extern` directive declares symbols defined in other modules. */
+        let,        /** @brief The `.let` directive declares a mutable assembler variable. */
+        const_,     /** @brief The `.const` directive declares an immutable assembler constant. */
     };
 }
 

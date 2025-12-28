@@ -129,6 +129,13 @@ namespace g10asm
             }
         }
 
+        // - Check if the current token is a variable token (starts with '$').
+        //   This indicates a variable assignment statement.
+        if (current_tk.type == token_type::variable)
+        {
+            return parse_var_assignment(lex);
+        }
+
         // - If we reach this point, the statement type is not yet supported.
         return g10::error(
             " - Unsupported statement type starting with token '{}'.\n"
@@ -392,6 +399,12 @@ namespace g10asm
 
             case directive_type::extern_:
                 return parse_dir_extern(lex, dir_tk);
+
+            case directive_type::let:
+                return parse_dir_let(lex, dir_tk);
+
+            case directive_type::const_:
+                return parse_dir_const(lex, dir_tk);
 
             default:
                 return g10::error(
@@ -955,6 +968,282 @@ namespace g10asm
         }
 
         return extern_node;  
+    }
+
+    auto parser::parse_dir_let (lexer& lex, const token& dir_tk)
+        -> g10::result_uptr<ast_node>
+    {
+        // - Create the AST node for the `.let` directive.
+        auto let_node = std::make_unique<ast_dir_let>(dir_tk);
+        if (let_node->valid == false)
+        {
+            return g10::error(
+                " - Failed to create AST node for `.let` directive.\n"
+                " - In file '{}:{}:{}'",
+                dir_tk.source_file,
+                dir_tk.source_line,
+                dir_tk.source_column
+            );
+        }
+
+        // - Peek at the next token, which should be a variable token.
+        auto var_peek_result = lex.peek_token(0);
+        if (var_peek_result.has_value() == false)
+        {
+            return g10::error(var_peek_result.error());
+        }
+
+        const token& var_peek_tk = var_peek_result.value();
+
+        // - Consume the variable token (must start with '$').
+        auto var_tk_result = lex.consume_token(
+            token_type::variable,
+            " - Expected variable name (starting with '$') after `.let`.\n"
+            " - In file '{}:{}:{}'",
+            var_peek_tk.source_file,
+            var_peek_tk.source_line,
+            var_peek_tk.source_column
+        );
+
+        if (var_tk_result.has_value() == false)
+        {
+            return g10::error(var_tk_result.error());
+        }
+
+        const token& var_tk = var_tk_result.value();
+
+        // - Store the variable name (without the '$' prefix).
+        let_node->variable_name = var_tk.lexeme.substr(1);
+
+        // - Consume the '=' assignment operator.
+        auto assign_tk_result = lex.consume_token(
+            token_type::assign_equal,
+            " - Expected '=' after variable name in `.let` directive.\n"
+            " - In file '{}:{}:{}'",
+            var_tk.source_file,
+            var_tk.source_line,
+            var_tk.source_column
+        );
+
+        if (assign_tk_result.has_value() == false)
+        {
+            return g10::error(assign_tk_result.error());
+        }
+
+        // - Parse the initialization expression.
+        auto init_expr_result = parse_expression(lex);
+        if (init_expr_result.has_value() == false)
+        {
+            return g10::error(
+                " - Failed to parse initialization expression for `.let` directive: '{}'\n"
+                " - In file '{}:{}:{}'",
+                init_expr_result.error(),
+                dir_tk.source_file,
+                dir_tk.source_line,
+                dir_tk.source_column
+            );
+        }
+
+        let_node->init_expression = std::move(init_expr_result.value());
+
+        return let_node;
+    }
+
+    auto parser::parse_dir_const (lexer& lex, const token& dir_tk)
+        -> g10::result_uptr<ast_node>
+    {
+        // - Create the AST node for the `.const` directive.
+        auto const_node = std::make_unique<ast_dir_const>(dir_tk);
+        if (const_node->valid == false)
+        {
+            return g10::error(
+                " - Failed to create AST node for `.const` directive.\n"
+                " - In file '{}:{}:{}'",
+                dir_tk.source_file,
+                dir_tk.source_line,
+                dir_tk.source_column
+            );
+        }
+
+        // - Peek at the next token, which should be a variable token.
+        auto var_peek_result = lex.peek_token(0);
+        if (var_peek_result.has_value() == false)
+        {
+            return g10::error(var_peek_result.error());
+        }
+
+        const token& var_peek_tk = var_peek_result.value();
+
+        // - Consume the variable token (must start with '$').
+        auto var_tk_result = lex.consume_token(
+            token_type::variable,
+            " - Expected constant name (starting with '$') after `.const`.\n"
+            " - In file '{}:{}:{}'",
+            var_peek_tk.source_file,
+            var_peek_tk.source_line,
+            var_peek_tk.source_column
+        );
+
+        if (var_tk_result.has_value() == false)
+        {
+            return g10::error(var_tk_result.error());
+        }
+
+        const token& var_tk = var_tk_result.value();
+
+        // - Store the constant name (without the '$' prefix).
+        const_node->constant_name = var_tk.lexeme.substr(1);
+
+        // - Consume the '=' assignment operator.
+        auto assign_tk_result = lex.consume_token(
+            token_type::assign_equal,
+            " - Expected '=' after constant name in `.const` directive.\n"
+            " - In file '{}:{}:{}'",
+            var_tk.source_file,
+            var_tk.source_line,
+            var_tk.source_column
+        );
+
+        if (assign_tk_result.has_value() == false)
+        {
+            return g10::error(assign_tk_result.error());
+        }
+
+        // - Parse the value expression.
+        auto value_expr_result = parse_expression(lex);
+        if (value_expr_result.has_value() == false)
+        {
+            return g10::error(
+                " - Failed to parse value expression for `.const` directive: '{}'\n"
+                " - In file '{}:{}:{}'",
+                value_expr_result.error(),
+                dir_tk.source_file,
+                dir_tk.source_line,
+                dir_tk.source_column
+            );
+        }
+
+        const_node->value_expression = std::move(value_expr_result.value());
+
+        return const_node;
+    }
+
+    auto parser::parse_var_assignment (lexer& lex)
+        -> g10::result_uptr<ast_node>
+    {
+        // - Peek at the variable token for error reporting.
+        auto var_peek_result = lex.peek_token(0);
+        if (var_peek_result.has_value() == false)
+        {
+            return g10::error(var_peek_result.error());
+        }
+
+        const token& var_peek_tk = var_peek_result.value();
+
+        // - Consume the variable token.
+        auto var_tk_result = lex.consume_token(
+            token_type::variable,
+            " - Expected variable name (starting with '$') for assignment.\n"
+            " - In file '{}:{}:{}'",
+            var_peek_tk.source_file,
+            var_peek_tk.source_line,
+            var_peek_tk.source_column
+        );
+
+        if (var_tk_result.has_value() == false)
+        {
+            return g10::error(var_tk_result.error());
+        }
+
+        const token& var_tk = var_tk_result.value();
+
+        // - Create the AST node for the variable assignment statement.
+        auto assign_node = std::make_unique<ast_stmt_var_assignment>(var_tk);
+        if (assign_node->valid == false)
+        {
+            return g10::error(
+                " - Failed to create AST node for variable assignment.\n"
+                " - In file '{}:{}:{}'",
+                var_tk.source_file,
+                var_tk.source_line,
+                var_tk.source_column
+            );
+        }
+
+        // - Store the variable name (without the '$' prefix).
+        assign_node->variable_name = var_tk.lexeme.substr(1);
+
+        // - Peek at the next token, which should be an assignment operator.
+        auto op_peek_result = lex.peek_token(0);
+        if (op_peek_result.has_value() == false)
+        {
+            return g10::error(op_peek_result.error());
+        }
+
+        const token& op_peek_tk = op_peek_result.value();
+
+        // - Check that the next token is an assignment operator.
+        bool is_assignment_op = false;
+        switch (op_peek_tk.type)
+        {
+            case token_type::assign_equal:
+            case token_type::assign_plus:
+            case token_type::assign_minus:
+            case token_type::assign_times:
+            case token_type::assign_exponent:
+            case token_type::assign_divide:
+            case token_type::assign_modulo:
+            case token_type::assign_and:
+            case token_type::assign_or:
+            case token_type::assign_xor:
+            case token_type::assign_shift_left:
+            case token_type::assign_shift_right:
+                is_assignment_op = true;
+                break;
+            default:
+                break;
+        }
+
+        if (is_assignment_op == false)
+        {
+            return g10::error(
+                " - Expected assignment operator (=, +=, -=, *=, etc.) after variable '${}'. Found '{}'.\n"
+                " - In file '{}:{}:{}'",
+                assign_node->variable_name,
+                op_peek_tk.lexeme,
+                op_peek_tk.source_file,
+                op_peek_tk.source_line,
+                op_peek_tk.source_column
+            );
+        }
+
+        // - Consume the assignment operator.
+        auto op_tk_result = lex.consume_token();
+        if (op_tk_result.has_value() == false)
+        {
+            return g10::error(op_tk_result.error());
+        }
+
+        const token& op_tk = op_tk_result.value();
+        assign_node->assignment_operator = op_tk.type;
+
+        // - Parse the value expression.
+        auto value_expr_result = parse_expression(lex);
+        if (value_expr_result.has_value() == false)
+        {
+            return g10::error(
+                " - Failed to parse value expression for variable assignment: '{}'\n"
+                " - In file '{}:{}:{}'",
+                value_expr_result.error(),
+                var_tk.source_file,
+                var_tk.source_line,
+                var_tk.source_column
+            );
+        }
+
+        assign_node->value_expression = std::move(value_expr_result.value());
+
+        return assign_node;
     }
 }
 

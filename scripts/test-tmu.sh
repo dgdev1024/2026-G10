@@ -43,6 +43,14 @@ for entry in "$TEST_DIR"/*; do
 
                 "$G10_ASM_TOOL" -s "$asm_file" -o "$obj_file"
                 if [[ $? -ne 0 ]]; then
+                    # If the folder name contains "error" in it, we expect
+                    # assembly to fail, so we don't treat this as an error
+                    # in the script.
+                    if [[ "$entry" == *"error"* ]]; then
+                        echo "Expected assembly failure for file: $asm_file"
+                        continue
+                    fi
+
                     echo "Assembly failed for file: $asm_file"
                     exit 1
                 fi
@@ -56,6 +64,13 @@ for entry in "$TEST_DIR"/*; do
 
         "$G10_LINKER_TOOL" "${obj_files[@]}" -o "$exe_file"
         if [[ $? -ne 0 ]]; then
+            # If the folder name contains "error" in it, we expect linking to
+            # fail, so we don't treat this as an error in the script.
+            if [[ "$entry" == *"error"* ]]; then
+                echo "Expected linking failure for directory: $entry"
+                continue
+            fi
+
             echo "Linking failed for directory: $entry"
             exit 1
         fi
@@ -65,6 +80,13 @@ for entry in "$TEST_DIR"/*; do
 
         "$G10_ASM_TOOL" -s "$entry" -o "$obj_file"
         if [[ $? -ne 0 ]]; then
+            # If the file contains "error" in its name, we expect assembly to
+            # fail, so we don't treat this as an error in the script.
+            if [[ "$entry" == *"error"* ]]; then
+                echo "Expected assembly failure for file: $entry"
+                continue
+            fi
+
             echo "Assembly failed for file: $entry"
             exit 1
         fi
@@ -73,6 +95,13 @@ for entry in "$TEST_DIR"/*; do
 
         "$G10_LINKER_TOOL" "$obj_file" -o "$exe_file"
         if [[ $? -ne 0 ]]; then
+            # If the file contains "error" in its name, we expect linking to
+            # fail, so we don't treat this as an error in the script.
+            if [[ "$entry" == *"error"* ]]; then
+                echo "Expected linking failure for file: $entry"
+                continue
+            fi
+
             echo "Linking failed for file: $entry"
             exit 1
         fi

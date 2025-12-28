@@ -171,6 +171,70 @@ namespace g10asm
 
     private: /* Private Types *************************************************/
 
+    private: /* Private Methods - Variable Pass *******************************/
+
+        /**
+         * @brief   Performs the variable pass of the assembly process.
+         * 
+         * This pass processes all `.let` and `.const` directives, as well as
+         * variable assignment statements, populating the environment with
+         * variable and constant values before the first pass.
+         * 
+         * This must be done before the first pass because variables can be
+         * used in `.org` expressions and other places that affect address
+         * calculation.
+         * 
+         * @param   state   The codegen state.
+         * @param   module  The AST module to process.
+         * 
+         * @return  If successful, returns `void`;
+         *          Otherwise, returns an error message describing the failure.
+         */
+        static auto variable_pass (codegen_state& state, ast_module& module)
+            -> g10::result<void>;
+
+        /**
+         * @brief   Processes a `.let` directive in the variable pass.
+         * 
+         * @param   state   The codegen state.
+         * @param   let_dir The AST `.let` directive node.
+         * 
+         * @return  If successful, returns `void`;
+         *          Otherwise, returns an error message describing the failure.
+         */
+        static auto variable_pass_let (
+            codegen_state& state,
+            ast_dir_let& let_dir
+        ) -> g10::result<void>;
+
+        /**
+         * @brief   Processes a `.const` directive in the variable pass.
+         * 
+         * @param   state       The codegen state.
+         * @param   const_dir   The AST `.const` directive node.
+         * 
+         * @return  If successful, returns `void`;
+         *          Otherwise, returns an error message describing the failure.
+         */
+        static auto variable_pass_const (
+            codegen_state& state,
+            ast_dir_const& const_dir
+        ) -> g10::result<void>;
+
+        /**
+         * @brief   Processes a variable assignment statement in the variable pass.
+         * 
+         * @param   state       The codegen state.
+         * @param   assign_stmt The AST variable assignment statement node.
+         * 
+         * @return  If successful, returns `void`;
+         *          Otherwise, returns an error message describing the failure.
+         */
+        static auto variable_pass_assignment (
+            codegen_state& state,
+            ast_stmt_var_assignment& assign_stmt
+        ) -> g10::result<void>;
+
     private: /* Private Methods - First Pass **********************************/
 
         /**

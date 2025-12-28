@@ -36,6 +36,9 @@ namespace g10asm
         dir_dword,              /** @brief An AST node representing a `.dword` directive. */
         dir_global,             /** @brief An AST node representing a `.global` directive. */
         dir_extern,             /** @brief An AST node representing an `.extern` directive. */
+        dir_let,                /** @brief An AST node representing a `.let` variable declaration directive. */
+        dir_const,              /** @brief An AST node representing a `.const` constant declaration directive. */
+        stmt_var_assignment,    /** @brief An AST node representing a variable assignment statement. */
         opr_immediate,          /** @brief An AST node representing an immediate operand (`52`, `0x34`). */
         opr_register,           /** @brief An AST node representing a register operand (`d0`, `w1`, `h2`, `l3`). */
         opr_condition,          /** @brief An AST node representing a branching condition operand (`nc`, `zs`, `cc`, `vs`). */
@@ -588,6 +591,74 @@ namespace g10asm
     {
         ast_node_ctor(ast_dir_extern, ast_node_type::dir_extern)
         std::vector<std::string_view> symbols;  /** @brief A list of label names (symbols) to be declared as external. */
+    };
+
+    /**
+     * @brief   Defines a structure representing an AST node for a `.let`
+     *          variable declaration directive.
+     * 
+     * The `.let` directive is used to declare a mutable assembler variable
+     * with an initial value. Variables can be modified later using assignment
+     * statements. Variable names are prefixed with `$` in source code.
+     * 
+     * Example:
+     * ```asm
+     * .let $counter = 0x10         ; Declare variable 'counter' with value 0x10
+     * $counter += 5                ; Modify counter to 0x15
+     * ld l0, $counter              ; Use variable value as immediate operand
+     * ```
+     */
+    struct ast_dir_let final : public ast_node
+    {
+        ast_node_ctor(ast_dir_let, ast_node_type::dir_let)
+        std::string_view variable_name;                     /** @brief The variable name (without the `$` prefix). */
+        std::unique_ptr<ast_expression> init_expression;    /** @brief The initialization expression. */
+    };
+
+    /**
+     * @brief   Defines a structure representing an AST node for a `.const`
+     *          constant declaration directive.
+     * 
+     * The `.const` directive is used to declare an immutable assembler constant
+     * with a value. Constants cannot be modified after declaration. Constant
+     * names are prefixed with `$` in source code.
+     * 
+     * Example:
+     * ```asm
+     * .const $MAX_VALUE = 0xFF     ; Declare constant 'MAX_VALUE' with value 0xFF
+     * ld l0, $MAX_VALUE            ; Use constant value as immediate operand
+     * ; $MAX_VALUE = 0x00          ; ERROR: Cannot modify a constant
+     * ```
+     */
+    struct ast_dir_const final : public ast_node
+    {
+        ast_node_ctor(ast_dir_const, ast_node_type::dir_const)
+        std::string_view constant_name;                     /** @brief The constant name (without the `$` prefix). */
+        std::unique_ptr<ast_expression> value_expression;   /** @brief The constant value expression. */
+    };
+
+    /**
+     * @brief   Defines a structure representing an AST node for a variable
+     *          assignment statement.
+     * 
+     * Variable assignment statements modify the value of a previously declared
+     * variable using an assignment operator. Both simple assignment (`=`) and
+     * compound assignment operators (`+=`, `-=`, `*=`, etc.) are supported.
+     * 
+     * Example:
+     * ```asm
+     * .let $value = 10             ; Declare variable
+     * $value = 20                  ; Simple assignment
+     * $value += 5                  ; Compound addition assignment
+     * $value *= 2                  ; Compound multiplication assignment
+     * ```
+     */
+    struct ast_stmt_var_assignment final : public ast_node
+    {
+        ast_node_ctor(ast_stmt_var_assignment, ast_node_type::stmt_var_assignment)
+        std::string_view variable_name;                     /** @brief The target variable name (without the `$` prefix). */
+        token_type assignment_operator;                     /** @brief The assignment operator (=, +=, -=, *=, etc.). */
+        std::unique_ptr<ast_expression> value_expression;   /** @brief The right-hand side value expression. */
     };
 
     /**

@@ -275,6 +275,57 @@ namespace g10asm
         static auto parse_dir_extern (lexer& lex, const token& dir_tk)
             -> g10::result_uptr<ast_node>;
 
+        /**
+         * @brief   Parses a `.let` variable declaration directive from the
+         *          token stream provided by the given lexer.
+         * 
+         * @param   lex     The lexer instance providing the sequence of tokens
+         *                  to be parsed.
+         * @param   dir_tk  The token representing the `.let` directive keyword.
+         * 
+         * @return  If successful, returns a unique pointer to the AST node
+         *          representing the parsed `.let` directive;
+         *          Otherwise, returns an error indicating that a parsing error
+         *          occurred.
+         */
+        static auto parse_dir_let (lexer& lex, const token& dir_tk)
+            -> g10::result_uptr<ast_node>;
+
+        /**
+         * @brief   Parses a `.const` constant declaration directive from the
+         *          token stream provided by the given lexer.
+         * 
+         * @param   lex     The lexer instance providing the sequence of tokens
+         *                  to be parsed.
+         * @param   dir_tk  The token representing the `.const` directive keyword.
+         * 
+         * @return  If successful, returns a unique pointer to the AST node
+         *          representing the parsed `.const` directive;
+         *          Otherwise, returns an error indicating that a parsing error
+         *          occurred.
+         */
+        static auto parse_dir_const (lexer& lex, const token& dir_tk)
+            -> g10::result_uptr<ast_node>;
+
+        /**
+         * @brief   Parses a variable assignment statement from the token stream
+         *          provided by the given lexer.
+         * 
+         * A variable assignment statement starts with a variable token (`$name`)
+         * followed by an assignment operator (`=`, `+=`, `-=`, `*=`, etc.) and
+         * a value expression.
+         * 
+         * @param   lex     The lexer instance providing the sequence of tokens
+         *                  to be parsed.
+         * 
+         * @return  If successful, returns a unique pointer to the AST node
+         *          representing the parsed variable assignment;
+         *          Otherwise, returns an error indicating that a parsing error
+         *          occurred.
+         */
+        static auto parse_var_assignment (lexer& lex)
+            -> g10::result_uptr<ast_node>;
+
     private: /* Private Methods - Operands ************************************/
 
         /**

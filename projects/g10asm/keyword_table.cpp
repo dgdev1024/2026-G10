@@ -97,7 +97,9 @@ namespace g10asm
         { ".word", keyword_type::assembler_directive, std::to_underlying(directive_type::word), 0 },
         { ".dword", keyword_type::assembler_directive, std::to_underlying(directive_type::dword), 0 },
         { ".global", keyword_type::assembler_directive, std::to_underlying(directive_type::global), 0 },
-        { ".extern", keyword_type::assembler_directive, std::to_underlying(directive_type::extern_), 0 },   
+        { ".extern", keyword_type::assembler_directive, std::to_underlying(directive_type::extern_), 0 },
+        { ".let", keyword_type::assembler_directive, std::to_underlying(directive_type::let), 0 },
+        { ".const", keyword_type::assembler_directive, std::to_underlying(directive_type::const_), 0 },
 
         // CPU Registers
         { "d0", keyword_type::register_name, std::to_underlying(g10::register_type::d0), 0 },
