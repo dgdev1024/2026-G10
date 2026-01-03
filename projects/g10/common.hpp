@@ -16,9 +16,11 @@
 #include <filesystem>
 #include <fstream>
 #include <format>
+#include <functional>
 #include <memory>
 #include <print>
 #include <span>
+#include <stack>
 #include <string>
 #include <string_view>
 #include <unordered_map>
@@ -62,6 +64,42 @@
             std::to_underlying(a) & std::to_underlying(b)); } \
     inline constexpr auto operator~ (ec a) noexcept -> ec \
         { return static_cast<ec>(~std::to_underlying(a)); }
+
+/* Public Constants ***********************************************************/
+
+namespace g10
+{
+    /**
+     * @brief   Defines the major, minor, and patch version numbers of the G10
+     *          library.
+     */
+    constexpr std::uint8_t  MAJOR_VERSION   = 1;
+    constexpr std::uint8_t  MINOR_VERSION   = 0;
+    constexpr std::uint16_t PATCH_VERSION   = 0;
+
+    /**
+     * @brief   Defines the combined version number of the G10 library, as a
+     *          32-bit integer laid out as follows: `0xMMmmPPPP`, where
+     *          `MM` is the major version, `mm` is the minor version, and
+     *          `PPPP` is the patch version.
+     */
+    constexpr std::uint32_t VERSION_NUMBER =
+        (static_cast<std::uint32_t>(MAJOR_VERSION) << 24) |
+        (static_cast<std::uint32_t>(MINOR_VERSION) << 16) |
+        (static_cast<std::uint32_t>(PATCH_VERSION));
+
+    /**
+     * @brief   Defines the version string of the G10 library in the format
+     *          "MAJOR.MINOR.PATCH".
+     */
+    const std::string VERSION_STRING = 
+        std::format(
+            "{}.{}.{}",
+            MAJOR_VERSION,
+            MINOR_VERSION,
+            PATCH_VERSION
+        );
+}
 
 /* Public Types ***************************************************************/
 
@@ -149,12 +187,36 @@ namespace g10
     template <typename T>
     using optional_cref = std::optional<cref<T>>;
 
+    /**
+     * @brief   Defines a variant type representing references to multiple
+     *          types.
+     * 
+     * @tparam  Ts  The types of the referenced values.
+     */
+    template <typename... Ts>
+    using variant_ref = std::variant<ref<Ts>...>;
+
+    /**
+     * @brief   Defines a variant type representing constant references to
+     *          multiple types.
+     * 
+     * @tparam  Ts  The types of the referenced values.
+     */
+    template <typename... Ts>
+    using variant_cref = std::variant<cref<Ts>...>;
+
 }
 
 /* Public Functions ***********************************************************/
 
 namespace g10
 {
+    template <typename T, typename... Args>
+    inline auto ok (Args&&... args) -> result<T>
+    {
+        return result<T> { T(std::forward<Args>(args)...) };
+    }
+
     /**
      * @brief   Helper function to create an unexpected result containing
      *          a formatted error message. This function is intended to be used

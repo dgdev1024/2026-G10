@@ -381,6 +381,53 @@ a Double Fault, it can only be exited via a hardware reset. This measure is take
 to prevent further complications and to ensure that the system can be brought back 
 to a known good state through an external reset.
 
+## Hardware Registers
+
+The G10 CPU provides a set of hardware registers which can be memory-mapped by
+the virtual machine hardware. These registers include the following:
+
+- `IE0`: Interrupt Enable Register - Byte 0
+    - This register corresponds to bits 0-7 of the 32-bit `IE` register.
+    - All 8 bits of this register are readable.
+    - Bits 1 through 7 of this register are writable.
+    - Bit 0 of this register corresponds to the exception handler interrupt
+        (interrupt vector #0), and is always set to `1`. Writing to this bit has
+        no effect.
+- `IE1`: Interrupt Enable Register - Byte 1
+    - This register corresponds to bits 8-15 of the 32-bit `IE` register.
+    - All 8 bits of this register are readable and writable.
+- `IE2`: Interrupt Enable Register - Byte 2
+    - This register corresponds to bits 16-23 of the 32-bit `IE` register.
+    - All 8 bits of this register are readable and writable.
+- `IE3`: Interrupt Enable Register - Byte 3
+    - This register corresponds to bits 24-31 of the 32-bit `IE` register.
+    - All 8 bits of this register are readable and writable.
+- `IRQ0`: Interrupt Request Register - Byte 0
+    - This register corresponds to bits 0-7 of the 32-bit `IRQ` register.
+    - All 8 bits of this register are readable and writable.
+- `IRQ1`: Interrupt Request Register - Byte 1
+    - This register corresponds to bits 8-15 of the 32-bit `IRQ` register.
+    - All 8 bits of this register are readable and writable.
+- `IRQ2`: Interrupt Request Register - Byte 2
+    - This register corresponds to bits 16-23 of the 32-bit `IRQ` register.
+    - All 8 bits of this register are readable and writable.
+- `IRQ3`: Interrupt Request Register - Byte 3
+    - This register corresponds to bits 24-31 of the 32-bit `IRQ` register.
+    - All 8 bits of this register are readable and writable.
+- `SPD`: Speed Control Register
+    - Bit 0: Speed Switch Armed Flag
+        - If this bit is set, the CPU will perform a speed switch (toggle
+            between normal speed and double speed) next time the CPU executes
+            a `STOP` instruction. The CPU will wait 2,050 M-cycles during this
+            process. See the **Instruction Timing** section for more on M-cycles.
+    - Bit 7: Current Speed Flag
+        - If this bit is set, the CPU is currently operating in double speed mode.
+        - If this bit is clear, the CPU is currently operating in normal speed mode.
+    - Bits 1-6: Unused, always read/write as `1`.
+
+Other virtual machine hardware components may define their own hardware registers
+which can be memory-mapped for access by the CPU, as well.
+
 ## Instructions
 
 The G10 CPU features a rich, fixed-length instruction set, designed to provide a
