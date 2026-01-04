@@ -12,6 +12,7 @@
 /* Public Includes ************************************************************/
 
 #include <g10asm/lexer.hpp>
+#include <g10asm/preprocessor_macros.hpp>
 #include <g10asm/preprocessor_evaluator.hpp>
 
 /* Public Constants and Enumerations ******************************************/
@@ -170,6 +171,241 @@ namespace g10asm
          */
         auto preprocess () -> g10::result<void>;
 
+    private: /* Private Methods - Token Navigation ****************************/
+
+        /**
+         * @brief   Retrieves the current token at the current index position.
+         *
+         * @return  If successful, returns a constant reference to the current
+         *          token in the input token list;
+         *          Otherwise, returns an error indicating the reason for the
+         *          failure.
+         */
+        auto current_token () const -> g10::result_cref<token>;
+
+        /**
+         * @brief   Peeks at a token at the specified offset from the current
+         *          position. The offset can be positive (lookahead) or negative
+         *          (lookbehind).
+         *
+         * @param   offset  The offset from the current position. Specify `0` to
+         *                  get the current token, positive values to look ahead,
+         *                  and negative values to look behind.
+         *
+         * @return  If `offset` is within bounds, returns a constant reference to
+         *          the token at the specified offset;
+         *          Otherwise, returns an error indicating the reason for the
+         *          failure.
+         */
+        auto peek_token (std::int64_t offset = 0) const 
+            -> g10::result_cref<token>;
+
+        /**
+         * @brief   Advances the current index position by the specified count.
+         *
+         * If advancing would move the index beyond the end of the token list,
+         * the index is set to the end of the list instead.
+         *
+         * @param   count   The number of positions to advance.
+         */
+        auto advance (std::size_t count = 1) -> void;
+
+        /**
+         * @brief   Checks if the current position is at the end of the token
+         *          list.
+         *
+         * @return  If the current position is at or beyond the end of the token
+         *          list, returns `true`;
+         *          Otherwise, returns `false`.
+         */
+        auto is_at_end () const -> bool;
+
+    private: /* Private Methods - Output Building *****************************/
+
+        /**
+         * @brief   Determines if a space should be added before the given
+         *          token type.
+         *
+         * @param   type    The token type to check.
+         *
+         * @return  If no space should precede this token type, returns `true`;
+         *          Otherwise, returns `false`.
+         */
+        auto is_no_space_before (token_type type) const -> bool;
+
+        /**
+         * @brief   Determines if a space should be added after the given
+         *          token type.
+         *
+         * @param   type    The token type to check.
+         *
+         * @return  If no space should follow this token type, returns `true`;
+         *          Otherwise, returns `false`.
+         */
+        auto is_no_space_after (token_type type) const -> bool;
+
+        /**
+         * @brief   Appends a token's lexeme to the output string with
+         *          appropriate spacing.
+         *
+         * @param   tok     The token to append.
+         */
+        auto append_token (const token& tok) -> void;
+
+        /**
+         * @brief   Appends a string view directly to the output.
+         *
+         * @param   str     The string view to append.
+         * 
+         * @warning If appending a temporary string view, ensure that the
+         *          underlying string data remains valid for the lifetime of
+         *          the preprocessor's output string. Otherwise, this may lead to
+         *          dangling references and undefined behavior. Use
+         *          @a `append_string` for temporary strings.
+         */
+        auto append_string_view (std::string_view str) -> void;
+
+        /**
+         * @brief   Appends a string directly to the output.
+         *
+         * @param   str     The string to append.
+         */
+        auto append_string (const std::string& str) -> void;
+
+        /**
+         * @brief   Appends a newline to the output and resets spacing state.
+         */
+        auto append_newline () -> void;
+
+    private: /* Private Methods - Line Continuation ***************************/
+
+        /**
+         * @brief   Handles line continuation (backslash followed by newline).
+         * 
+         * Line continuations in the G10's preprocessing language allow a
+         * logical line of code to be split across multiple physical lines in
+         * the source file. This is achieved by placing a backslash (`\`) at the
+         * end of a line, immediately followed by a newline character. The
+         * preprocessor recognizes this pattern and treats the subsequent line
+         * as a continuation of the current line, effectively removing the
+         * backslash and newline from the output.
+         *
+         * @return  If a line continuation was handled, returns `true`;
+         *          Otherwise, returns `false`.
+         */
+        auto handle_line_continuation () -> bool;
+
+    private: /* Private Methods - Directive Handling **************************/
+
+        /**
+         * @brief   Checks if the current token is a preprocessor directive
+         *          and handles it if so.
+         * 
+         * @return  If a directive was handled, returns `true`;
+         *          Otherwise, returns `false`. Returns an error if directive
+         *          processing failed.
+         */
+        auto handle_directive () -> g10::result<bool>;
+
+        /**
+         * @brief   Handles the `.define` directive to create a text-substitution
+         *          macro.
+         * 
+         * @return  If successful, returns `void`;
+         *          Otherwise, returns an error.
+         */
+        auto handle_define_directive () -> g10::result<void>;
+
+        /**
+         * @brief   Handles the `.undef` or `.purge` directive to remove a macro.
+         * 
+         * @return  If successful, returns `void`;
+         *          Otherwise, returns an error.
+         */
+        auto handle_undef_directive () -> g10::result<void>;
+
+    private: /* Private Methods - Macro Expansion *****************************/
+
+        /**
+         * @brief   Attempts to expand a macro if the current token is an
+         *          identifier that matches a defined macro.
+         * 
+         * @return  If macro expansion occurred, returns `true`;
+         *          Otherwise, returns `false`.
+         */
+        auto try_expand_macro () -> bool;
+
+    private: /* Private Methods - Expression Evaluation ***********************/
+
+        /**
+         * @brief   Handles braced expression interpolation.
+         * 
+         * When the preprocessor encounters a left brace `{`, it collects
+         * all tokens until the matching right brace `}`, evaluates the
+         * expression, and emits the result to the output string.
+         * 
+         * @return  If a braced expression was handled, returns `true`;
+         *          Otherwise, returns `false`. Returns an error if evaluation
+         *          failed.
+         */
+        auto handle_braced_expression () -> g10::result<bool>;
+
+        /**
+         * @brief   Handles identifier interpolation with braced expressions.
+         * 
+         * This handles cases where identifiers contain or are adjacent to
+         * braced expressions, such as:
+         * - `{expr}_suffix` → `result_suffix`
+         * - `prefix_{expr}` → `prefix_result`
+         * - `prefix_{expr}_suffix` → `prefix_result_suffix`
+         * 
+         * @return  If identifier interpolation was handled, returns `true`;
+         *          Otherwise, returns `false`. Returns an error if evaluation
+         *          failed.
+         */
+        auto handle_identifier_interpolation () -> g10::result<bool>;
+
+        /**
+         * @brief   Handles string literal interpolation with braced expressions.
+         * 
+         * This processes string literals to find and evaluate embedded
+         * expressions like `"The answer is {42}."`.
+         * 
+         * @return  If string interpolation was handled, returns `true`;
+         *          Otherwise, returns `false`. Returns an error if evaluation
+         *          failed.
+         */
+        auto handle_string_interpolation () -> g10::result<bool>;
+
+        /**
+         * @brief   Evaluates a braced expression given a string containing
+         *          the expression content (without the braces).
+         * 
+         * @param   expr_content    The expression content to evaluate.
+         * @param   source_file     Source file for error reporting.
+         * @param   source_line     Source line for error reporting.
+         * 
+         * @return  If successful, returns the string representation of the
+         *          evaluated expression;
+         *          Otherwise, returns an error.
+         */
+        auto evaluate_inline_expression (
+            const std::string& expr_content,
+            const std::string& source_file,
+            std::size_t source_line
+        ) -> g10::result<std::string>;
+
+        /**
+         * @brief   Checks if two tokens are adjacent (no whitespace between them).
+         * 
+         * @param   first   The first token.
+         * @param   second  The second token.
+         * 
+         * @return  `true` if the tokens are adjacent; `false` otherwise.
+         */
+        auto are_tokens_adjacent (const token& first, const token& second) const
+            -> bool;
+
     private: /* Private Members ***********************************************/
 
         /**
@@ -194,6 +430,17 @@ namespace g10asm
         bool m_good { false };
 
         /**
+         * @brief   The current index position in the input token list.
+         */
+        std::size_t m_current_index { 0 };
+
+        /**
+         * @brief   Indicates whether a space should be added before the next
+         *          token in the output.
+         */
+        bool m_needs_space { false };
+
+        /**
          * @brief   The maximum recursion depth for macro expansions.
          */
         std::size_t m_max_recursion_depth
@@ -204,6 +451,11 @@ namespace g10asm
          */
         std::size_t m_max_include_depth
             { DEFAULT_MAX_PREPROCESSOR_INCLUDE_DEPTH };
+
+        /**
+         * @brief   The macro table for storing defined macros.
+         */
+        pp_macro_table m_macro_table {};
 
     };
 }

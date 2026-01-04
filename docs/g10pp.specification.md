@@ -188,15 +188,47 @@ Example of manual include guards:
 
 ## Preprocessor Expressions
 
-The G10 assembly preprocessor supports basic expression evaluation for conditions
-and parameters. Expressions can include integer literals, arithmetic operators
-(`+`, `-`, `*`, `/`, `%`), bitwise operators (`&`, `|`, `^`, `~`, `<<`, `>>`),
-comparison operators (`==`, `!=`, `<`, `>`, `<=`, `>=`), logical operators (`&&`, 
-`||`, `!`), and parentheses for grouping. Expressions are evaluated using
-64-bit signed integer arithmetic.
+The G10 assembly preprocessor supports expression evaluation for conditions,
+parameters, and inline value computation. Expressions can include integer 
+literals, arithmetic operators (`+`, `-`, `*`, `/`, `%`), bitwise operators 
+(`&`, `|`, `^`, `~`, `<<`, `>>`), comparison operators (`==`, `!=`, `<`, `>`, 
+`<=`, `>=`), logical operators (`&&`, `||`, `!`), and parentheses for grouping. 
+Expressions are evaluated using 64-bit signed integer arithmetic.
+
+### Braced Expression Interpolation
+
+**Preprocessor expressions must be enclosed in curly braces `{}`** to be
+evaluated. When the preprocessor encounters a braced expression, it evaluates
+the expression and replaces the entire `{expression}` with the resulting value.
+
+Examples:
+
+```asm
+; Basic arithmetic - {3 + 2} is replaced with 5
+ld r0, {3 + 2}          ; Becomes: ld r0, 5
+
+; Bitwise operations - {0xFF & 0x0F} is replaced with 15
+ld r1, {0xFF & 0x0F}    ; Becomes: ld r1, 15
+
+; Complex expressions
+ld r2, {(1 + 2) * 3}    ; Becomes: ld r2, 9
+
+; In macro definitions, braced expressions are evaluated at definition time
+.define VALUE {1 + 2 * 3}   ; VALUE is defined as 7, not (1 + 2 * 3)
+ld r3, VALUE                ; Becomes: ld r3, 7
+
+; Without braces, expressions are NOT evaluated
+.define EXPR (1 + 2 * 3)    ; EXPR is defined as literal tokens (1 + 2 * 3)
+ld r4, EXPR                 ; Becomes: ld r4, (1 + 2 * 3)
+```
+
+This distinction allows developers to choose whether an expression should be
+evaluated at preprocessing time (with braces) or preserved for later assembly
+stages (without braces).
 
 Expressions are used in various preprocessor directives, such as `.if`, `.elif`,
-`.rept`, `.for`, and `.while`, as well as for parameter values in macros.
+`.rept`, `.for`, and `.while`, as well as for parameter values in macros. In
+these directive contexts, the braces are still required.
 
 ### Numeric Literals
 
@@ -513,8 +545,8 @@ basic examples of a parameterized macro is as follows:
 ```asm
 ; Definition of a parameterized macro with two named parameters
 .macro ADD_BYTES SRC1, SRC2
-    ld l0, @SRC1
-    add l0, @SRC2
+    ld l0, {@SRC1}
+    add l0, {@SRC2}
 .endm
 
 ; Invocation
@@ -528,7 +560,7 @@ ADD_BYTES 0x10, 0x20        ; Expands to:
 ; - Note that this macro does not define any named parameters
 .macro DEFINE_DOUBLED_BYTES
     .rept @argt
-        .byte @1 * 2
+        .byte {@1 * 2}
         .shift 1                ; We'll talk about this in the next section
     .endr
 .endm

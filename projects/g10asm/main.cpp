@@ -299,8 +299,9 @@ auto main (int argc, const char** argv) -> int
         );
         return 1;
     }
-    else if (g10asm::s_lex == true)
+    else if (g10asm::s_lex == true && g10asm::s_preprocess == false)
     {
+        // Only --lex specified: print initial lexer output
         g10asm::print_lexer(lexer);
         return 0;
     }
@@ -321,6 +322,14 @@ auto main (int argc, const char** argv) -> int
         return 1;
     }
 
+    // - If only --preprocess is specified (without --lex), print the raw
+    //   preprocessed string output.
+    if (g10asm::s_preprocess == true && g10asm::s_lex == false)
+    {
+        std::println("{}", preprocessor.get_output());
+        return 0;
+    }
+
     // - Run lexical analysis on the string output by the preprocessor.
     lexer.clear();
     auto postprocess_lex_result = lexer.load_from_string(
@@ -333,7 +342,7 @@ auto main (int argc, const char** argv) -> int
         );
         return 1;
     }
-    else if (g10asm::s_preprocess == true)
+    else if (g10asm::s_preprocess == true && g10asm::s_lex == true)
     {
         g10asm::print_lexer(lexer);
         return 0;
