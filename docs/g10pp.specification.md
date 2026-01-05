@@ -228,7 +228,9 @@ stages (without braces).
 
 Expressions are used in various preprocessor directives, such as `.if`, `.elif`,
 `.rept`, `.for`, and `.while`, as well as for parameter values in macros. In
-these directive contexts, the braces are still required.
+these directive contexts, since the entire argument to these directives are
+expressions handled by the preprocessor, the braces `{}` are not allowed or
+required in those cases.
 
 ### Numeric Literals
 
@@ -293,10 +295,183 @@ precedence (from highest to lowest):
 The preprocessor provides several built-in functions that can be used within
 expressions:
 
-#### Numeric Functions
+#### Integer Functions
 
-- `fint(FP)`: Returns the integer part of the fixed-point number `FP`.
+- `high(N)`: Returns the upper 8 bits of `N`. Equivalent to `(N >> 8) & 0xFF`.
+- `low(N)`: Returns the lower 8 bits of `N`. Equivalent to `N & 0xFF`.
+- `bitwidth(N)`: Returns the number of bits necessary to represent `N`.
+- `abs(N)`: Returns the absolute value of `N`.
+- `min(A, B)`: Returns the smaller of `A` and `B`.
+- `max(A, B)`: Returns the larger of `A` and `B`.
+- `clamp(V, LO, HI)`: Returns `V` clamped to the range `[LO, HI]`.
+
+#### Fixed-Point Representation
+
+The G10 preprocessor uses **32.32 fixed-point format**, where:
+- The upper 32 bits represent the signed integer part.
+- The lower 32 bits represent the fractional part.
+
+This provides a range of approximately ±2 billion with a precision of about
+2.3×10⁻¹⁰ (1/2³²). Fixed-point literals are written with a decimal point,
+e.g., `3.14159`, `-0.5`, `42.0`.
+
+Since fixed-point values are stored as 64-bit integers, you can convert between
+formats:
+- **Fixed-point to integer**: Shift right by 32 bits, or divide by `1.0`.
+- **Integer to fixed-point**: Shift left by 32 bits, or multiply by `1.0`.
+
+Example:
+```asm
+.define PI 3.14159
+.define TWO_PI {PI * 2.0}           ; Fixed-point multiplication
+.define INT_PI {PI / 1.0}           ; Converts to integer 3
+.define FP_TEN {10 * 1.0}           ; Converts integer 10 to fixed-point
+```
+
+#### Fixed-Point Arithmetic Functions
+
+Standard arithmetic operators (`+`, `-`) work directly with fixed-point numbers
+since they have the same representation. However, multiplication and division
+require special handling to maintain the correct fixed-point format:
+
+- `fmul(X, Y)`: Fixed-point multiplication. Multiplies two fixed-point numbers
+    and returns a fixed-point result. Equivalent to `(X * Y) >> 32` but with
+    proper rounding.
+- `fdiv(X, Y)`: Fixed-point division. Divides `X` by `Y` and returns a
+    fixed-point result. Equivalent to `(X << 32) / Y` but handles overflow.
+- `fmod(X, Y)`: Fixed-point modulo. Returns the remainder of `X / Y` as a
+    fixed-point number. The result has the same sign as the dividend `X`.
+
+Example:
+```asm
+.define HALF 0.5
+.define THIRD {fdiv(1.0, 3.0)}      ; Approximately 0.33333...
+.define PRODUCT {fmul(2.5, 4.0)}    ; Result: 10.0
+.define REMAINDER {fmod(5.5, 2.0)}  ; Result: 1.5
+```
+
+#### Fixed-Point Conversion Functions
+
+- `fint(FP)`: Returns the integer part of the fixed-point number `FP` as an
+    integer. Equivalent to `FP >> 32` (arithmetic shift to preserve sign).
 - `ffrac(FP)`: Returns the fractional part of the fixed-point number `FP`.
+    The result is a fixed-point number in the range `[0.0, 1.0)` for positive
+    numbers, or `(-1.0, 0.0]` for negative numbers.
+- `round(FP)`: Rounds `FP` to the nearest integer (half away from zero).
+    Returns an integer value.
+- `ceil(FP)`: Rounds `FP` up to the nearest integer (toward positive infinity).
+    Returns an integer value.
+- `floor(FP)`: Rounds `FP` down to the nearest integer (toward negative infinity).
+    Returns an integer value.
+- `trunc(FP)`: Truncates `FP` toward zero (removes fractional part).
+    Returns an integer value.
+
+Example:
+```asm
+.define VALUE 3.7
+.define INT_PART {fint(VALUE)}      ; Result: 3
+.define FRAC_PART {ffrac(VALUE)}    ; Result: 0.7
+.define ROUNDED {round(VALUE)}      ; Result: 4
+.define CEILED {ceil(VALUE)}        ; Result: 4
+.define FLOORED {floor(VALUE)}      ; Result: 3
+
+.define NEG_VALUE -2.3
+.define NEG_ROUNDED {round(NEG_VALUE)}  ; Result: -2
+.define NEG_CEILED {ceil(NEG_VALUE)}    ; Result: -2
+.define NEG_FLOORED {floor(NEG_VALUE)}  ; Result: -3
+```
+
+#### Fixed-Point Math Functions
+
+- `pow(X, Y)`: Raises `X` to the power of `Y`. Both arguments and the result
+    are fixed-point numbers.
+- `log(X, BASE)`: Returns the logarithm of `X` with base `BASE`. Both arguments
+    and the result are fixed-point numbers.
+- `sqrt(X)`: Returns the square root of `X` as a fixed-point number.
+- `exp(X)`: Returns e raised to the power of `X` as a fixed-point number.
+- `ln(X)`: Returns the natural logarithm of `X` as a fixed-point number.
+- `log2(X)`: Returns the base-2 logarithm of `X` as a fixed-point number.
+- `log10(X)`: Returns the base-10 logarithm of `X` as a fixed-point number.
+
+Example:
+```asm
+.define SQUARE_ROOT {sqrt(2.0)}     ; Approximately 1.41421...
+.define POWER {pow(2.0, 10.0)}      ; Result: 1024.0
+.define LOG_VAL {log(100.0, 10.0)}  ; Result: 2.0
+.define E_CUBED {exp(3.0)}          ; Approximately 20.0855...
+```
+
+#### Trigonometric Functions
+
+All trigonometric functions use **turns** as the unit of angle measurement,
+where **1.0 turn = 360 degrees = 2π radians**. This representation is natural
+for fixed-point arithmetic and avoids the need for π constants.
+
+| Turns | Degrees | Radians |
+|-------|---------|---------|
+| 0.0   | 0°      | 0       |
+| 0.25  | 90°     | π/2     |
+| 0.5   | 180°    | π       |
+| 0.75  | 270°    | 3π/2    |
+| 1.0   | 360°    | 2π      |
+
+- `sin(ANGLE)`: Returns the sine of `ANGLE` (in turns) as a fixed-point number
+    in the range `[-1.0, 1.0]`.
+- `cos(ANGLE)`: Returns the cosine of `ANGLE` (in turns) as a fixed-point number
+    in the range `[-1.0, 1.0]`.
+- `tan(ANGLE)`: Returns the tangent of `ANGLE` (in turns) as a fixed-point number.
+    Note: Results approach infinity near `ANGLE = 0.25` and `ANGLE = 0.75`.
+
+Inverse trigonometric functions return angles in turns:
+
+- `asin(X)`: Returns the arc sine of `X` (where `X` is in `[-1.0, 1.0]`).
+    Result is in the range `[-0.25, 0.25]` (i.e., -90° to 90°).
+- `acos(X)`: Returns the arc cosine of `X` (where `X` is in `[-1.0, 1.0]`).
+    Result is in the range `[0.0, 0.5]` (i.e., 0° to 180°).
+- `atan(X)`: Returns the arc tangent of `X`.
+    Result is in the range `[-0.25, 0.25]` (i.e., -90° to 90°).
+- `atan2(Y, X)`: Returns the angle (in turns) from the positive X-axis to the
+    point `(X, Y)`. Result is in the range `[-0.5, 0.5]` (i.e., -180° to 180°).
+    This is useful for computing angles in all four quadrants.
+
+Example:
+```asm
+; Generate a sine wave table with 256 entries, scaled to [0, 255]
+.for i, 0, 256
+    .define ANGLE {fdiv({i * 1.0}, 256.0)}   ; 0.0 to ~1.0 turn
+    .define SINE_VAL {sin(ANGLE)}             ; -1.0 to 1.0
+    .define SCALED {fmul(SINE_VAL + 1.0, 127.5)}
+    .byte {fint(SCALED)}
+.endfor
+
+; Compute angle for a direction vector
+.define DX 3.0
+.define DY 4.0
+.define ANGLE_TURNS {atan2(DY, DX)}           ; Approximately 0.1476 turns
+.define ANGLE_DEGREES {fint(fmul(ANGLE_TURNS, 360.0))}  ; Approximately 53°
+```
+
+#### Conversion Between Units
+
+To convert between turns, degrees, and radians:
+
+```asm
+; Degrees to turns: divide by 360
+.define DEG_TO_TURNS(d) {fdiv({d * 1.0}, 360.0)}
+
+; Turns to degrees: multiply by 360
+.define TURNS_TO_DEG(t) {fint(fmul({t}, 360.0))}
+
+; For radians, you'll need an approximation of π
+.define PI 3.14159265358979
+.define TWO_PI {fmul(PI, 2.0)}
+
+; Radians to turns: divide by 2π
+.define RAD_TO_TURNS(r) {fdiv({r}, TWO_PI)}
+
+; Turns to radians: multiply by 2π
+.define TURNS_TO_RAD(t) {fmul({t}, TWO_PI)}
+```
 
 #### String Functions
 
@@ -333,6 +508,12 @@ expressions:
 .if defined(DEBUG_MODE)
     .message "Debug mode is enabled"
 .endif
+
+; Fixed-point calculation example
+.define SCALE_FACTOR 1.5
+.define BASE_VALUE 100
+.define SCALED_VALUE {fint(fmul({BASE_VALUE * 1.0}, SCALE_FACTOR))}
+; SCALED_VALUE = 150
 ```
 
 ## Macros

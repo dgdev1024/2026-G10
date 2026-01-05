@@ -80,6 +80,128 @@ namespace g10asm
          */
         std::vector<std::string> include_dirs {};
     };
+
+    /**
+     * @brief   Represents the state of a conditional assembly block.
+     * 
+     * This structure tracks whether a condition has been met, whether the
+     * current branch is active, and whether an `.else` directive has been
+     * encountered.
+     */
+    struct conditional_state final
+    {
+        /**
+         * @brief   Indicates whether any branch in this conditional block
+         *          has been taken (condition was true).
+         */
+        bool condition_met { false };
+
+        /**
+         * @brief   Indicates whether the current branch is being processed
+         *          (tokens should be emitted).
+         */
+        bool currently_active { false };
+
+        /**
+         * @brief   Indicates whether an `.else` directive has been seen
+         *          in this conditional block.
+         */
+        bool else_seen { false };
+
+        /**
+         * @brief   Source file where the conditional block started.
+         */
+        std::string source_file {};
+
+        /**
+         * @brief   Source line where the conditional block started.
+         */
+        std::size_t source_line { 0 };
+    };
+
+    /**
+     * @brief   Enumerates the types of loop assembly blocks.
+     */
+    enum class loop_type
+    {
+        repeat,     ///< .repeat/.rept loop
+        for_loop,   ///< .for loop
+        while_loop  ///< .while loop
+    };
+
+    /**
+     * @brief   Represents the state of a loop assembly block.
+     * 
+     * This structure tracks the loop type, iteration count, loop variable,
+     * and the collected body tokens for re-processing.
+     */
+    struct loop_state final
+    {
+        /**
+         * @brief   The type of loop (repeat, for, or while).
+         */
+        loop_type type { loop_type::repeat };
+
+        /**
+         * @brief   Name of the loop variable (optional for repeat/while).
+         */
+        std::string variable_name {};
+
+        /**
+         * @brief   Current value of the loop variable.
+         */
+        std::int64_t current_value { 0 };
+
+        /**
+         * @brief   End value for .for loops (exclusive).
+         */
+        std::int64_t end_value { 0 };
+
+        /**
+         * @brief   Step value for .for loops.
+         */
+        std::int64_t step_value { 1 };
+
+        /**
+         * @brief   Current iteration count (0-based).
+         */
+        std::size_t iteration_count { 0 };
+
+        /**
+         * @brief   Maximum number of iterations for .repeat loops.
+         */
+        std::size_t max_iterations { 0 };
+
+        /**
+         * @brief   Collected tokens of the loop body.
+         */
+        std::vector<token> body_tokens {};
+
+        /**
+         * @brief   Condition tokens for .while loops.
+         */
+        std::vector<token> condition_tokens {};
+
+        /**
+         * @brief   Source file where the loop started.
+         */
+        std::string source_file {};
+
+        /**
+         * @brief   Source line where the loop started.
+         */
+        std::size_t source_line { 0 };
+
+        /**
+         * @brief   Flag to indicate loop should break.
+         */
+        bool should_break { false };
+
+        /**
+         * @brief   Flag to indicate loop should continue to next iteration.
+         */
+        bool should_continue { false };
+    };
 }
 
 /* Public Classes *************************************************************/
@@ -324,6 +446,204 @@ namespace g10asm
          */
         auto handle_undef_directive () -> g10::result<void>;
 
+    private: /* Private Methods - Conditional Assembly ************************/
+
+        /**
+         * @brief   Checks if the preprocessor is currently in an active
+         *          conditional branch (i.e., tokens should be emitted).
+         * 
+         * @return  `true` if currently active (or no conditionals);
+         *          `false` if in an inactive branch.
+         */
+        auto is_conditionally_active () const -> bool;
+
+        /**
+         * @brief   Skips tokens until the next relevant conditional directive
+         *          is found (.elif, .else, .endif, or nested .if/.endif pairs).
+         * 
+         * This method is called when a conditional branch is inactive and
+         * tokens need to be skipped until the next branch or end of block.
+         * 
+         * @return  If successful, returns `void`;
+         *          Otherwise, returns an error (e.g., unmatched conditional).
+         */
+        auto skip_conditional_block () -> g10::result<void>;
+
+        /**
+         * @brief   Validates that a token list does not contain braces.
+         * 
+         * In directive expression contexts (`.if`, `.elif`, `.repeat`, `.for`,
+         * `.while`), braces `{}` are not allowed since the entire argument is
+         * already an expression handled by the preprocessor.
+         * 
+         * @param   tokens          The tokens to validate.
+         * @param   directive_name  The name of the directive (for error messages).
+         * 
+         * @return  If no braces are found, returns `void`;
+         *          Otherwise, returns an error.
+         */
+        auto validate_no_braces (
+            const std::vector<token>& tokens,
+            std::string_view directive_name
+        ) -> g10::result<void>;
+
+        /**
+         * @brief   Evaluates a condition expression for `.if` or `.elif`.
+         * 
+         * Collects tokens until newline and evaluates them as an expression.
+         * 
+         * @return  If successful, returns the boolean result of the condition;
+         *          Otherwise, returns an error.
+         */
+        auto evaluate_condition () -> g10::result<bool>;
+
+        /**
+         * @brief   Handles the `.if` directive.
+         * 
+         * @return  If successful, returns `void`;
+         *          Otherwise, returns an error.
+         */
+        auto handle_if_directive () -> g10::result<void>;
+
+        /**
+         * @brief   Handles the `.ifdef` directive.
+         * 
+         * @return  If successful, returns `void`;
+         *          Otherwise, returns an error.
+         */
+        auto handle_ifdef_directive () -> g10::result<void>;
+
+        /**
+         * @brief   Handles the `.ifndef` directive.
+         * 
+         * @return  If successful, returns `void`;
+         *          Otherwise, returns an error.
+         */
+        auto handle_ifndef_directive () -> g10::result<void>;
+
+        /**
+         * @brief   Handles the `.elif` or `.elseif` directive.
+         * 
+         * @return  If successful, returns `void`;
+         *          Otherwise, returns an error.
+         */
+        auto handle_elif_directive () -> g10::result<void>;
+
+        /**
+         * @brief   Handles the `.else` directive.
+         * 
+         * @return  If successful, returns `void`;
+         *          Otherwise, returns an error.
+         */
+        auto handle_else_directive () -> g10::result<void>;
+
+        /**
+         * @brief   Handles the `.endif` or `.endc` directive.
+         * 
+         * @return  If successful, returns `void`;
+         *          Otherwise, returns an error.
+         */
+        auto handle_endif_directive () -> g10::result<void>;
+
+    private: /* Private Methods - Loop Assembly *******************************/
+
+        /**
+         * @brief   Checks if the preprocessor is currently inside a loop.
+         * 
+         * @return  `true` if inside a loop; `false` otherwise.
+         */
+        auto is_in_loop () const -> bool;
+
+        /**
+         * @brief   Collects tokens for a loop body until the matching end
+         *          directive is found.
+         * 
+         * @param   end_directive   The directive type that ends this loop.
+         * 
+         * @return  If successful, returns the collected tokens;
+         *          Otherwise, returns an error.
+         */
+        auto collect_loop_body (directive_type end_directive) 
+            -> g10::result<std::vector<token>>;
+
+        /**
+         * @brief   Processes a single iteration of a loop.
+         * 
+         * @param   body_tokens The tokens of the loop body.
+         * @param   loop        Reference to the current loop state.
+         * 
+         * @return  If successful, returns `void`;
+         *          Otherwise, returns an error.
+         */
+        auto process_loop_iteration (
+            const std::vector<token>& body_tokens,
+            loop_state& loop
+        ) -> g10::result<void>;
+
+        /**
+         * @brief   Handles the `.repeat` or `.rept` directive.
+         * 
+         * @return  If successful, returns `void`;
+         *          Otherwise, returns an error.
+         */
+        auto handle_repeat_directive () -> g10::result<void>;
+
+        /**
+         * @brief   Handles the `.endrepeat` or `.endr` directive.
+         * 
+         * @return  If successful, returns `void`;
+         *          Otherwise, returns an error.
+         */
+        auto handle_endrepeat_directive () -> g10::result<void>;
+
+        /**
+         * @brief   Handles the `.for` directive.
+         * 
+         * @return  If successful, returns `void`;
+         *          Otherwise, returns an error.
+         */
+        auto handle_for_directive () -> g10::result<void>;
+
+        /**
+         * @brief   Handles the `.endfor` or `.endf` directive.
+         * 
+         * @return  If successful, returns `void`;
+         *          Otherwise, returns an error.
+         */
+        auto handle_endfor_directive () -> g10::result<void>;
+
+        /**
+         * @brief   Handles the `.while` directive.
+         * 
+         * @return  If successful, returns `void`;
+         *          Otherwise, returns an error.
+         */
+        auto handle_while_directive () -> g10::result<void>;
+
+        /**
+         * @brief   Handles the `.endwhile` or `.endw` directive.
+         * 
+         * @return  If successful, returns `void`;
+         *          Otherwise, returns an error.
+         */
+        auto handle_endwhile_directive () -> g10::result<void>;
+
+        /**
+         * @brief   Handles the `.continue` directive.
+         * 
+         * @return  If successful, returns `void`;
+         *          Otherwise, returns an error.
+         */
+        auto handle_continue_directive () -> g10::result<void>;
+
+        /**
+         * @brief   Handles the `.break` directive.
+         * 
+         * @return  If successful, returns `void`;
+         *          Otherwise, returns an error.
+         */
+        auto handle_break_directive () -> g10::result<void>;
+
     private: /* Private Methods - Macro Expansion *****************************/
 
         /**
@@ -456,6 +776,17 @@ namespace g10asm
          * @brief   The macro table for storing defined macros.
          */
         pp_macro_table m_macro_table {};
+
+        /**
+         * @brief   Stack of conditional assembly states for tracking nested
+         *          `.if`/`.endif` blocks.
+         */
+        std::vector<conditional_state> m_conditional_stack {};
+
+        /**
+         * @brief   Stack of loop states for tracking nested loops.
+         */
+        std::vector<loop_state> m_loop_stack {};
 
     };
 }

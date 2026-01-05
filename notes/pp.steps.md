@@ -78,4 +78,7 @@ these instructions:
 2. [Step 2: Text-Substitution Macros (`.define` and `.undef`/`.purge`)](./pp.step2.md)
 3. [Step 3: Braced Expression Interpolation](./pp.step3.md)
 4. [Step 4: Extended Braced Expression Interpolation (Identifiers and Strings)](./pp.step4.md)
+5. [Step 5: Built-in Functions](./pp.step5.md)
+6. [Step 6: Conditional Assembly](./pp.step6.md)
+7. [Step 7: Loop Assembly Blocks](./pp.step7.md)
 

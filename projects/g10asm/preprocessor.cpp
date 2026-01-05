@@ -115,6 +115,7 @@ namespace g10asm
         m_current_index = 0;
         m_output_string.clear();
         m_needs_space = false;
+        m_conditional_stack.clear();
 
         while (is_at_end() == false)
         {
@@ -131,6 +132,25 @@ namespace g10asm
             }
 
             const token& tok = tok_result.value();
+
+            // If we're in an inactive conditional branch, skip tokens
+            // Note: Directive handling must still occur to track nested conditionals
+            if (is_conditionally_active() == false)
+            {
+                // Skip inactive conditional block
+                auto skip_result = skip_conditional_block();
+                if (skip_result.has_value() == false)
+                {
+                    return g10::error(
+                        "{}\n - In file '{}:{}:{}'",
+                        skip_result.error(),
+                        tok.source_file,
+                        tok.source_line,
+                        tok.source_column
+                    );
+                }
+                continue;
+            }
 
             // Handle newlines specially - output newline and reset spacing
             if (tok.type == token_type::new_line)
@@ -217,6 +237,18 @@ namespace g10asm
             // For all other tokens, append to output with appropriate spacing
             append_token(tok);
             advance();
+        }
+
+        // Check for unclosed conditional blocks
+        if (m_conditional_stack.empty() == false)
+        {
+            const auto& unclosed = m_conditional_stack.back();
+            return g10::error(
+                " - Unclosed conditional block.\n"
+                " - Started at '{}:{}'",
+                unclosed.source_file,
+                unclosed.source_line
+            );
         }
 
         m_good = true;
@@ -456,6 +488,62 @@ namespace g10asm
 
             case directive_type::undef:
                 return handle_undef_directive()
+                    .and_then([] () -> g10::result<bool> { return true; });
+
+            case directive_type::if_:
+                return handle_if_directive()
+                    .and_then([] () -> g10::result<bool> { return true; });
+
+            case directive_type::ifdef_:
+                return handle_ifdef_directive()
+                    .and_then([] () -> g10::result<bool> { return true; });
+
+            case directive_type::ifndef_:
+                return handle_ifndef_directive()
+                    .and_then([] () -> g10::result<bool> { return true; });
+
+            case directive_type::elseif:
+                return handle_elif_directive()
+                    .and_then([] () -> g10::result<bool> { return true; });
+
+            case directive_type::else_:
+                return handle_else_directive()
+                    .and_then([] () -> g10::result<bool> { return true; });
+
+            case directive_type::endif:
+                return handle_endif_directive()
+                    .and_then([] () -> g10::result<bool> { return true; });
+
+            case directive_type::repeat:
+                return handle_repeat_directive()
+                    .and_then([] () -> g10::result<bool> { return true; });
+
+            case directive_type::endrepeat:
+                return handle_endrepeat_directive()
+                    .and_then([] () -> g10::result<bool> { return true; });
+
+            case directive_type::for_:
+                return handle_for_directive()
+                    .and_then([] () -> g10::result<bool> { return true; });
+
+            case directive_type::endfor:
+                return handle_endfor_directive()
+                    .and_then([] () -> g10::result<bool> { return true; });
+
+            case directive_type::while_:
+                return handle_while_directive()
+                    .and_then([] () -> g10::result<bool> { return true; });
+
+            case directive_type::endwhile:
+                return handle_endwhile_directive()
+                    .and_then([] () -> g10::result<bool> { return true; });
+
+            case directive_type::continue_:
+                return handle_continue_directive()
+                    .and_then([] () -> g10::result<bool> { return true; });
+
+            case directive_type::break_:
+                return handle_break_directive()
                     .and_then([] () -> g10::result<bool> { return true; });
 
             default:
@@ -710,6 +798,1500 @@ namespace g10asm
     }
 }
 
+/* Private Methods - Conditional Assembly *************************************/
+
+namespace g10asm
+{
+    auto preprocessor::is_conditionally_active () const -> bool
+    {
+        // If no conditionals on the stack, we're active
+        if (m_conditional_stack.empty() == true)
+        {
+            return true;
+        }
+
+        // Otherwise, check if the top of the stack is active
+        return m_conditional_stack.back().currently_active;
+    }
+
+    auto preprocessor::skip_conditional_block () -> g10::result<void>
+    {
+        // Skip tokens until we find a matching .elif, .else, or .endif
+        // Must track nested conditionals to properly match
+        std::size_t nesting_depth = 1;  // We're inside one conditional
+
+        while (is_at_end() == false && nesting_depth > 0)
+        {
+            auto tok_result = current_token();
+            if (tok_result.has_value() == false)
+            {
+                break;
+            }
+
+            const token& tok = tok_result.value();
+
+            // Check if this is a preprocessor directive
+            if (tok.type == token_type::keyword &&
+                tok.keyword_value.has_value() == true)
+            {
+                const keyword& kw = tok.keyword_value.value();
+                if (kw.type == keyword_type::preprocessor_directive)
+                {
+                    const auto dir_type = static_cast<directive_type>(kw.param1);
+
+                    switch (dir_type)
+                    {
+                        case directive_type::if_:
+                        case directive_type::ifdef_:
+                        case directive_type::ifndef_:
+                            // Nested conditional - increase depth
+                            ++nesting_depth;
+                            advance();
+                            break;
+
+                        case directive_type::endif:
+                            --nesting_depth;
+                            if (nesting_depth == 0)
+                            {
+                                // This is our matching .endif
+                                return handle_endif_directive();
+                            }
+                            advance();
+                            break;
+
+                        case directive_type::elseif:
+                            if (nesting_depth == 1)
+                            {
+                                // This is at our level - handle it
+                                return handle_elif_directive();
+                            }
+                            advance();
+                            break;
+
+                        case directive_type::else_:
+                            if (nesting_depth == 1)
+                            {
+                                // This is at our level - handle it
+                                return handle_else_directive();
+                            }
+                            advance();
+                            break;
+
+                        default:
+                            advance();
+                            break;
+                    }
+                }
+                else
+                {
+                    advance();
+                }
+            }
+            else
+            {
+                advance();
+            }
+        }
+
+        // If we get here with nesting_depth > 0, we have an unclosed conditional
+        if (nesting_depth > 0)
+        {
+            return g10::error(" - Unexpected end of file in conditional block.");
+        }
+
+        return {};
+    }
+
+    auto preprocessor::validate_no_braces (
+        const std::vector<token>& tokens,
+        std::string_view directive_name
+    ) -> g10::result<void>
+    {
+        for (const auto& tok : tokens)
+        {
+            if (tok.type == token_type::left_brace ||
+                tok.type == token_type::right_brace)
+            {
+                return g10::error(
+                    " - Curly braces are not allowed in '{}' expressions.\n"
+                    " - The entire argument is already an expression; "
+                    "braces are not required.",
+                    directive_name
+                );
+            }
+        }
+        return {};
+    }
+
+    auto preprocessor::evaluate_condition () -> g10::result<bool>
+    {
+        // Collect tokens until newline
+        std::vector<token> condition_tokens {};
+
+        while (is_at_end() == false)
+        {
+            // Handle line continuation
+            if (handle_line_continuation() == true)
+            {
+                continue;
+            }
+
+            auto tok_result = current_token();
+            if (tok_result.has_value() == false)
+            {
+                break;
+            }
+
+            const token& tok = tok_result.value();
+
+            if (tok.type == token_type::new_line)
+            {
+                advance();
+                break;
+            }
+
+            condition_tokens.push_back(tok);
+            advance();
+        }
+
+        if (condition_tokens.empty() == true)
+        {
+            return g10::error(" - Expected condition after directive.");
+        }
+
+        // Validate no braces in condition expression
+        auto validate_result = validate_no_braces(condition_tokens, ".if/.elif");
+        if (validate_result.has_value() == false)
+        {
+            return g10::error(validate_result.error());
+        }
+
+        // Evaluate the condition expression
+        pp_evaluator evaluator { condition_tokens, m_macro_table };
+        auto eval_result = evaluator.evaluate();
+        if (eval_result.has_value() == false)
+        {
+            return g10::error(
+                " - Failed to evaluate condition:\n{}",
+                eval_result.error()
+            );
+        }
+
+        // Convert result to boolean
+        return pp_evaluator::to_boolean(eval_result.value());
+    }
+
+    auto preprocessor::handle_if_directive () -> g10::result<void>
+    {
+        // Store source info for error reporting
+        auto tok_result = current_token();
+        if (tok_result.has_value() == false)
+        {
+            return g10::error(" - Internal error: expected .if token.");
+        }
+        const token& tok = tok_result.value();
+        std::string source_file { tok.source_file };
+        std::size_t source_line = tok.source_line;
+
+        // Advance past .if
+        advance();
+
+        // Evaluate the condition
+        auto condition_result = evaluate_condition();
+        if (condition_result.has_value() == false)
+        {
+            return g10::error(condition_result.error());
+        }
+
+        bool condition = condition_result.value();
+
+        // Determine if this branch should be active
+        // It's only active if parent is active AND condition is true
+        bool parent_active = is_conditionally_active();
+        bool should_be_active = parent_active && condition;
+
+        // Push new conditional state
+        m_conditional_stack.push_back({
+            .condition_met = should_be_active,
+            .currently_active = should_be_active,
+            .else_seen = false,
+            .source_file = source_file,
+            .source_line = source_line
+        });
+
+        return {};
+    }
+
+    auto preprocessor::handle_ifdef_directive () -> g10::result<void>
+    {
+        // Store source info for error reporting
+        auto tok_result = current_token();
+        if (tok_result.has_value() == false)
+        {
+            return g10::error(" - Internal error: expected .ifdef token.");
+        }
+        const token& tok = tok_result.value();
+        std::string source_file { tok.source_file };
+        std::size_t source_line = tok.source_line;
+
+        // Advance past .ifdef
+        advance();
+
+        // Get the macro name
+        auto name_result = current_token();
+        if (name_result.has_value() == false)
+        {
+            return g10::error(" - Expected macro name after '.ifdef'.");
+        }
+
+        const token& name_tok = name_result.value();
+        if (name_tok.type != token_type::identifier)
+        {
+            return g10::error(
+                " - Expected identifier after '.ifdef', got '{}'.",
+                token::stringify_type(name_tok.type)
+            );
+        }
+
+        std::string macro_name { name_tok.lexeme };
+        advance();
+
+        // Skip to end of line
+        while (is_at_end() == false)
+        {
+            auto t = current_token();
+            if (t.has_value() == false) break;
+            if (t.value().get().type == token_type::new_line)
+            {
+                advance();
+                break;
+            }
+            advance();
+        }
+
+        // Check if macro is defined
+        bool is_defined = m_macro_table.is_macro_defined(macro_name);
+
+        // Determine if this branch should be active
+        bool parent_active = is_conditionally_active();
+        bool should_be_active = parent_active && is_defined;
+
+        // Push new conditional state
+        m_conditional_stack.push_back({
+            .condition_met = should_be_active,
+            .currently_active = should_be_active,
+            .else_seen = false,
+            .source_file = source_file,
+            .source_line = source_line
+        });
+
+        return {};
+    }
+
+    auto preprocessor::handle_ifndef_directive () -> g10::result<void>
+    {
+        // Store source info for error reporting
+        auto tok_result = current_token();
+        if (tok_result.has_value() == false)
+        {
+            return g10::error(" - Internal error: expected .ifndef token.");
+        }
+        const token& tok = tok_result.value();
+        std::string source_file { tok.source_file };
+        std::size_t source_line = tok.source_line;
+
+        // Advance past .ifndef
+        advance();
+
+        // Get the macro name
+        auto name_result = current_token();
+        if (name_result.has_value() == false)
+        {
+            return g10::error(" - Expected macro name after '.ifndef'.");
+        }
+
+        const token& name_tok = name_result.value();
+        if (name_tok.type != token_type::identifier)
+        {
+            return g10::error(
+                " - Expected identifier after '.ifndef', got '{}'.",
+                token::stringify_type(name_tok.type)
+            );
+        }
+
+        std::string macro_name { name_tok.lexeme };
+        advance();
+
+        // Skip to end of line
+        while (is_at_end() == false)
+        {
+            auto t = current_token();
+            if (t.has_value() == false) break;
+            if (t.value().get().type == token_type::new_line)
+            {
+                advance();
+                break;
+            }
+            advance();
+        }
+
+        // Check if macro is NOT defined
+        bool is_not_defined = (m_macro_table.is_macro_defined(macro_name) == false);
+
+        // Determine if this branch should be active
+        bool parent_active = is_conditionally_active();
+        bool should_be_active = parent_active && is_not_defined;
+
+        // Push new conditional state
+        m_conditional_stack.push_back({
+            .condition_met = should_be_active,
+            .currently_active = should_be_active,
+            .else_seen = false,
+            .source_file = source_file,
+            .source_line = source_line
+        });
+
+        return {};
+    }
+
+    auto preprocessor::handle_elif_directive () -> g10::result<void>
+    {
+        // Check if there's a matching .if
+        if (m_conditional_stack.empty() == true)
+        {
+            return g10::error(" - '.elif'/'.elseif' without matching '.if'.");
+        }
+
+        conditional_state& state = m_conditional_stack.back();
+
+        // Check if .else was already seen
+        if (state.else_seen == true)
+        {
+            return g10::error(" - '.elif'/'.elseif' after '.else'.");
+        }
+
+        // Advance past .elif
+        advance();
+
+        // Evaluate the condition
+        auto condition_result = evaluate_condition();
+        if (condition_result.has_value() == false)
+        {
+            return g10::error(condition_result.error());
+        }
+
+        bool condition = condition_result.value();
+
+        // Determine if this branch should be active
+        // Only active if no previous branch was taken AND condition is true
+        // AND parent (if any) is active
+        bool parent_active = true;
+        if (m_conditional_stack.size() > 1)
+        {
+            // Check parent's state (second from top)
+            parent_active = m_conditional_stack[m_conditional_stack.size() - 2].currently_active;
+        }
+
+        if (state.condition_met == true)
+        {
+            // A previous branch was already taken - stay inactive
+            state.currently_active = false;
+        }
+        else if (parent_active && condition)
+        {
+            // This branch should be active
+            state.condition_met = true;
+            state.currently_active = true;
+        }
+        else
+        {
+            state.currently_active = false;
+        }
+
+        return {};
+    }
+
+    auto preprocessor::handle_else_directive () -> g10::result<void>
+    {
+        // Check if there's a matching .if
+        if (m_conditional_stack.empty() == true)
+        {
+            return g10::error(" - '.else' without matching '.if'.");
+        }
+
+        conditional_state& state = m_conditional_stack.back();
+
+        // Check if .else was already seen
+        if (state.else_seen == true)
+        {
+            return g10::error(" - Duplicate '.else' in conditional block.");
+        }
+
+        // Mark that we've seen .else
+        state.else_seen = true;
+
+        // Advance past .else
+        advance();
+
+        // Skip to end of line
+        while (is_at_end() == false)
+        {
+            auto tok_result = current_token();
+            if (tok_result.has_value() == false) break;
+            if (tok_result.value().get().type == token_type::new_line)
+            {
+                advance();
+                break;
+            }
+            advance();
+        }
+
+        // Determine if this branch should be active
+        // Only active if no previous branch was taken AND parent is active
+        bool parent_active = true;
+        if (m_conditional_stack.size() > 1)
+        {
+            parent_active = m_conditional_stack[m_conditional_stack.size() - 2].currently_active;
+        }
+
+        if (state.condition_met == true)
+        {
+            // A previous branch was already taken - stay inactive
+            state.currently_active = false;
+        }
+        else if (parent_active)
+        {
+            // This is the fallback branch - activate it
+            state.condition_met = true;
+            state.currently_active = true;
+        }
+        else
+        {
+            state.currently_active = false;
+        }
+
+        return {};
+    }
+
+    auto preprocessor::handle_endif_directive () -> g10::result<void>
+    {
+        // Check if there's a matching .if
+        if (m_conditional_stack.empty() == true)
+        {
+            return g10::error(" - '.endif'/'.endc' without matching '.if'.");
+        }
+
+        // Pop the conditional state
+        m_conditional_stack.pop_back();
+
+        // Advance past .endif
+        advance();
+
+        // Skip to end of line
+        while (is_at_end() == false)
+        {
+            auto tok_result = current_token();
+            if (tok_result.has_value() == false) break;
+            if (tok_result.value().get().type == token_type::new_line)
+            {
+                advance();
+                break;
+            }
+            advance();
+        }
+
+        return {};
+    }
+}
+
+/* Private Methods - Loop Assembly ********************************************/
+
+namespace g10asm
+{
+    auto preprocessor::is_in_loop () const -> bool
+    {
+        return (m_loop_stack.empty() == false);
+    }
+
+    auto preprocessor::collect_loop_body (directive_type end_directive)
+        -> g10::result<std::vector<token>>
+    {
+        std::vector<token> body_tokens {};
+        std::size_t nesting_depth = 1;
+
+        // Determine which start directives to track for nesting
+        auto is_loop_start = [] (directive_type dt) -> bool
+        {
+            return dt == directive_type::repeat ||
+                   dt == directive_type::for_ ||
+                   dt == directive_type::while_;
+        };
+
+        auto is_loop_end = [] (directive_type dt) -> bool
+        {
+            return dt == directive_type::endrepeat ||
+                   dt == directive_type::endfor ||
+                   dt == directive_type::endwhile;
+        };
+
+        while (is_at_end() == false && nesting_depth > 0)
+        {
+            auto tok_result = current_token();
+            if (tok_result.has_value() == false)
+            {
+                break;
+            }
+
+            const token& tok = tok_result.value();
+
+            // Check if this is a loop directive
+            if (tok.type == token_type::keyword &&
+                tok.keyword_value.has_value() == true)
+            {
+                const keyword& kw = tok.keyword_value.value();
+                if (kw.type == keyword_type::preprocessor_directive)
+                {
+                    const auto dir_type = static_cast<directive_type>(kw.param1);
+
+                    if (is_loop_start(dir_type))
+                    {
+                        ++nesting_depth;
+                    }
+                    else if (is_loop_end(dir_type))
+                    {
+                        --nesting_depth;
+                        if (nesting_depth == 0)
+                        {
+                            // Don't include the end directive in body
+                            break;
+                        }
+                    }
+                }
+            }
+
+            body_tokens.push_back(tok);
+            advance();
+        }
+
+        if (nesting_depth > 0)
+        {
+            return g10::error(" - Unclosed loop block.");
+        }
+
+        return body_tokens;
+    }
+
+    auto preprocessor::process_loop_iteration (
+        const std::vector<token>& body_tokens,
+        loop_state& loop
+    ) -> g10::result<void>
+    {
+        // Save current input tokens and index
+        std::vector<token> saved_tokens = std::move(m_input_tokens);
+        std::size_t saved_index = m_current_index;
+        
+        // Save conditional stack depth - conditionals opened in loop should
+        // be closed within the loop, but if break/continue exits early, we
+        // need to restore to this depth
+        std::size_t saved_cond_depth = m_conditional_stack.size();
+
+        // Set body tokens as input
+        m_input_tokens = body_tokens;
+        m_current_index = 0;
+
+        // Define/update loop variable if present
+        if (loop.variable_name.empty() == false)
+        {
+            // Create a synthetic token for the variable value
+            token value_token {};
+            value_token.type = token_type::integer_literal;
+            value_token.lexeme = std::to_string(loop.current_value);
+            value_token.int_value = loop.current_value;
+            value_token.source_file = loop.source_file;
+            value_token.source_line = loop.source_line;
+
+            std::vector<token> replacement { value_token };
+            m_macro_table.define_text_sub_macro(
+                loop.variable_name,
+                replacement,
+                loop.source_file,
+                loop.source_line
+            );
+        }
+
+        // Process the loop body
+        while (is_at_end() == false)
+        {
+            // Check if loop should break or continue
+            if (loop.should_break || loop.should_continue)
+            {
+                break;
+            }
+
+            // Handle line continuation
+            if (handle_line_continuation() == true)
+            {
+                continue;
+            }
+
+            auto tok_result = current_token();
+            if (tok_result.has_value() == false)
+            {
+                break;
+            }
+
+            const token& tok = tok_result.value();
+
+            // Handle newlines
+            if (tok.type == token_type::new_line)
+            {
+                append_newline();
+                advance();
+                continue;
+            }
+
+            // If in inactive conditional, skip
+            if (is_conditionally_active() == false)
+            {
+                auto skip_result = skip_conditional_block();
+                if (skip_result.has_value() == false)
+                {
+                    // Restore state before returning error
+                    m_input_tokens = std::move(saved_tokens);
+                    m_current_index = saved_index;
+                    return g10::error(skip_result.error());
+                }
+                continue;
+            }
+
+            // Handle directives
+            auto directive_result = handle_directive();
+            if (directive_result.has_value() == false)
+            {
+                m_input_tokens = std::move(saved_tokens);
+                m_current_index = saved_index;
+                return g10::error(
+                    "{}\n - In file '{}:{}:{}'",
+                    directive_result.error(),
+                    tok.source_file,
+                    tok.source_line,
+                    tok.source_column
+                );
+            }
+            if (directive_result.value() == true)
+            {
+                continue;
+            }
+
+            // Handle identifier interpolation
+            auto ident_result = handle_identifier_interpolation();
+            if (ident_result.has_value() == false)
+            {
+                m_input_tokens = std::move(saved_tokens);
+                m_current_index = saved_index;
+                return g10::error(ident_result.error());
+            }
+            if (ident_result.value() == true)
+            {
+                continue;
+            }
+
+            // Handle string interpolation
+            auto string_result = handle_string_interpolation();
+            if (string_result.has_value() == false)
+            {
+                m_input_tokens = std::move(saved_tokens);
+                m_current_index = saved_index;
+                return g10::error(string_result.error());
+            }
+            if (string_result.value() == true)
+            {
+                continue;
+            }
+
+            // Handle braced expressions
+            auto braced_result = handle_braced_expression();
+            if (braced_result.has_value() == false)
+            {
+                m_input_tokens = std::move(saved_tokens);
+                m_current_index = saved_index;
+                return g10::error(braced_result.error());
+            }
+            if (braced_result.value() == true)
+            {
+                continue;
+            }
+
+            // Try macro expansion
+            if (try_expand_macro() == true)
+            {
+                continue;
+            }
+
+            // Append token
+            append_token(tok);
+            advance();
+        }
+
+        // Restore conditional stack to saved depth (in case break/continue
+        // exited early from within a conditional block)
+        while (m_conditional_stack.size() > saved_cond_depth)
+        {
+            m_conditional_stack.pop_back();
+        }
+
+        // Restore state
+        m_input_tokens = std::move(saved_tokens);
+        m_current_index = saved_index;
+
+        return {};
+    }
+
+    auto preprocessor::handle_repeat_directive () -> g10::result<void>
+    {
+        // Store source info
+        auto tok_result = current_token();
+        if (tok_result.has_value() == false)
+        {
+            return g10::error(" - Internal error: expected .repeat token.");
+        }
+        const token& tok = tok_result.value();
+        std::string source_file { tok.source_file };
+        std::size_t source_line = tok.source_line;
+
+        // Advance past .repeat
+        advance();
+
+        // Collect count expression tokens until comma or newline
+        std::vector<token> count_tokens {};
+        std::string var_name {};
+
+        while (is_at_end() == false)
+        {
+            if (handle_line_continuation()) continue;
+
+            auto t = current_token();
+            if (t.has_value() == false) break;
+            const token& curr = t.value();
+
+            if (curr.type == token_type::new_line)
+            {
+                advance();
+                break;
+            }
+
+            if (curr.type == token_type::comma)
+            {
+                advance();
+                // Next token should be variable name
+                auto var_result = current_token();
+                if (var_result.has_value() == true)
+                {
+                    const token& var_tok = var_result.value();
+                    if (var_tok.type == token_type::identifier)
+                    {
+                        var_name = var_tok.lexeme;
+                        advance();
+                    }
+                }
+                // Skip to end of line
+                while (is_at_end() == false)
+                {
+                    auto nl = current_token();
+                    if (nl.has_value() == false) break;
+                    if (nl.value().get().type == token_type::new_line)
+                    {
+                        advance();
+                        break;
+                    }
+                    advance();
+                }
+                break;
+            }
+
+            count_tokens.push_back(curr);
+            advance();
+        }
+
+        if (count_tokens.empty())
+        {
+            return g10::error(" - Expected count expression after '.repeat'.");
+        }
+
+        // Validate no braces in count expression
+        auto validate_result = validate_no_braces(count_tokens, ".repeat/.rept");
+        if (validate_result.has_value() == false)
+        {
+            return g10::error(validate_result.error());
+        }
+
+        // Evaluate count
+        pp_evaluator evaluator { count_tokens, m_macro_table };
+        auto eval_result = evaluator.evaluate();
+        if (eval_result.has_value() == false)
+        {
+            return g10::error(
+                " - Failed to evaluate repeat count:\n{}",
+                eval_result.error()
+            );
+        }
+
+        auto count_result = pp_evaluator::to_integer(eval_result.value());
+        if (count_result.has_value() == false)
+        {
+            return g10::error(" - Repeat count must be an integer.");
+        }
+
+        std::int64_t count = count_result.value();
+
+        // Collect loop body
+        auto body_result = collect_loop_body(directive_type::endrepeat);
+        if (body_result.has_value() == false)
+        {
+            return g10::error(
+                "{}\n - In '.repeat' starting at '{}:{}'",
+                body_result.error(),
+                source_file,
+                source_line
+            );
+        }
+
+        std::vector<token> body_tokens = std::move(body_result.value());
+
+        // Skip the .endrepeat directive
+        advance();
+        while (is_at_end() == false)
+        {
+            auto t = current_token();
+            if (t.has_value() == false) break;
+            if (t.value().get().type == token_type::new_line)
+            {
+                advance();
+                break;
+            }
+            advance();
+        }
+
+        // Execute loop
+        if (count <= 0)
+        {
+            return {};  // Skip body entirely
+        }
+
+        loop_state loop {};
+        loop.type = loop_type::repeat;
+        loop.variable_name = var_name;
+        loop.max_iterations = static_cast<std::size_t>(count);
+        loop.source_file = source_file;
+        loop.source_line = source_line;
+
+        m_loop_stack.push_back(loop);
+
+        for (std::size_t i = 0; i < static_cast<std::size_t>(count); ++i)
+        {
+            m_loop_stack.back().iteration_count = i;
+            m_loop_stack.back().current_value = static_cast<std::int64_t>(i);
+            m_loop_stack.back().should_continue = false;
+
+            auto iter_result = process_loop_iteration(
+                body_tokens, 
+                m_loop_stack.back()
+            );
+
+            if (iter_result.has_value() == false)
+            {
+                m_loop_stack.pop_back();
+                if (var_name.empty() == false)
+                {
+                    m_macro_table.undefine_macro(var_name);
+                }
+                return g10::error(iter_result.error());
+            }
+
+            if (m_loop_stack.back().should_break)
+            {
+                break;
+            }
+        }
+
+        m_loop_stack.pop_back();
+
+        // Remove loop variable
+        if (var_name.empty() == false)
+        {
+            m_macro_table.undefine_macro(var_name);
+        }
+
+        return {};
+    }
+
+    auto preprocessor::handle_endrepeat_directive () -> g10::result<void>
+    {
+        // This should only be reached if there's an unmatched .endrepeat
+        return g10::error(" - '.endrepeat'/'.endr' without matching '.repeat'/'.rept'.");
+    }
+
+    auto preprocessor::handle_for_directive () -> g10::result<void>
+    {
+        // Store source info
+        auto tok_result = current_token();
+        if (tok_result.has_value() == false)
+        {
+            return g10::error(" - Internal error: expected .for token.");
+        }
+        const token& tok = tok_result.value();
+        std::string source_file { tok.source_file };
+        std::size_t source_line = tok.source_line;
+
+        // Advance past .for
+        advance();
+
+        // Parse: <var>, <start>, <end> [, <step>]
+        std::string var_name {};
+        std::vector<token> start_tokens {};
+        std::vector<token> end_tokens {};
+        std::vector<token> step_tokens {};
+
+        // Get variable name
+        auto var_result = current_token();
+        if (var_result.has_value() == false)
+        {
+            return g10::error(" - Expected variable name after '.for'.");
+        }
+        
+        const token& var_tok = var_result.value();
+        if (var_tok.type != token_type::identifier)
+        {
+            return g10::error(
+                " - Expected identifier for loop variable, got '{}'.",
+                token::stringify_type(var_tok.type)
+            );
+        }
+        var_name = var_tok.lexeme;
+        advance();
+
+        // Expect comma
+        auto comma1 = current_token();
+        if (comma1.has_value() == false || 
+            comma1.value().get().type != token_type::comma)
+        {
+            return g10::error(" - Expected ',' after loop variable in '.for'.");
+        }
+        advance();
+
+        // Collect start expression
+        while (is_at_end() == false)
+        {
+            if (handle_line_continuation()) continue;
+            auto t = current_token();
+            if (t.has_value() == false) break;
+            const token& curr = t.value();
+            if (curr.type == token_type::comma || 
+                curr.type == token_type::new_line)
+            {
+                break;
+            }
+            start_tokens.push_back(curr);
+            advance();
+        }
+
+        if (start_tokens.empty())
+        {
+            return g10::error(" - Expected start value in '.for'.");
+        }
+
+        // Expect comma
+        auto comma2 = current_token();
+        if (comma2.has_value() == false || 
+            comma2.value().get().type != token_type::comma)
+        {
+            return g10::error(" - Expected ',' after start value in '.for'.");
+        }
+        advance();
+
+        // Collect end expression
+        while (is_at_end() == false)
+        {
+            if (handle_line_continuation()) continue;
+            auto t = current_token();
+            if (t.has_value() == false) break;
+            const token& curr = t.value();
+            if (curr.type == token_type::comma || 
+                curr.type == token_type::new_line)
+            {
+                break;
+            }
+            end_tokens.push_back(curr);
+            advance();
+        }
+
+        if (end_tokens.empty())
+        {
+            return g10::error(" - Expected end value in '.for'.");
+        }
+
+        // Check for optional step
+        auto maybe_comma = current_token();
+        if (maybe_comma.has_value() == true && 
+            maybe_comma.value().get().type == token_type::comma)
+        {
+            advance();
+            // Collect step expression
+            while (is_at_end() == false)
+            {
+                if (handle_line_continuation()) continue;
+                auto t = current_token();
+                if (t.has_value() == false) break;
+                const token& curr = t.value();
+                if (curr.type == token_type::new_line)
+                {
+                    break;
+                }
+                step_tokens.push_back(curr);
+                advance();
+            }
+        }
+
+        // Skip to end of line
+        while (is_at_end() == false)
+        {
+            auto t = current_token();
+            if (t.has_value() == false) break;
+            if (t.value().get().type == token_type::new_line)
+            {
+                advance();
+                break;
+            }
+            advance();
+        }
+
+        // Validate no braces in expressions
+        auto validate_start = validate_no_braces(start_tokens, ".for");
+        if (validate_start.has_value() == false)
+        {
+            return g10::error(validate_start.error());
+        }
+
+        auto validate_end = validate_no_braces(end_tokens, ".for");
+        if (validate_end.has_value() == false)
+        {
+            return g10::error(validate_end.error());
+        }
+
+        if (step_tokens.empty() == false)
+        {
+            auto validate_step = validate_no_braces(step_tokens, ".for");
+            if (validate_step.has_value() == false)
+            {
+                return g10::error(validate_step.error());
+            }
+        }
+
+        // Evaluate start, end, step
+        pp_evaluator start_eval { start_tokens, m_macro_table };
+        auto start_result = start_eval.evaluate();
+        if (start_result.has_value() == false)
+        {
+            return g10::error(" - Failed to evaluate start value: {}", 
+                start_result.error());
+        }
+        auto start_int = pp_evaluator::to_integer(start_result.value());
+        if (start_int.has_value() == false)
+        {
+            return g10::error(" - Start value must be an integer.");
+        }
+        std::int64_t start_value = start_int.value();
+
+        pp_evaluator end_eval { end_tokens, m_macro_table };
+        auto end_result = end_eval.evaluate();
+        if (end_result.has_value() == false)
+        {
+            return g10::error(" - Failed to evaluate end value: {}", 
+                end_result.error());
+        }
+        auto end_int = pp_evaluator::to_integer(end_result.value());
+        if (end_int.has_value() == false)
+        {
+            return g10::error(" - End value must be an integer.");
+        }
+        std::int64_t end_value = end_int.value();
+
+        std::int64_t step_value = 1;
+        if (step_tokens.empty() == false)
+        {
+            pp_evaluator step_eval { step_tokens, m_macro_table };
+            auto step_result = step_eval.evaluate();
+            if (step_result.has_value() == false)
+            {
+                return g10::error(" - Failed to evaluate step value: {}", 
+                    step_result.error());
+            }
+            auto step_int = pp_evaluator::to_integer(step_result.value());
+            if (step_int.has_value() == false)
+            {
+                return g10::error(" - Step value must be an integer.");
+            }
+            step_value = step_int.value();
+        }
+
+        if (step_value == 0)
+        {
+            return g10::error(" - Step value cannot be zero in '.for' loop.");
+        }
+
+        // Collect loop body
+        auto body_result = collect_loop_body(directive_type::endfor);
+        if (body_result.has_value() == false)
+        {
+            return g10::error(
+                "{}\n - In '.for' starting at '{}:{}'",
+                body_result.error(),
+                source_file,
+                source_line
+            );
+        }
+
+        std::vector<token> body_tokens = std::move(body_result.value());
+
+        // Skip the .endfor directive
+        advance();
+        while (is_at_end() == false)
+        {
+            auto t = current_token();
+            if (t.has_value() == false) break;
+            if (t.value().get().type == token_type::new_line)
+            {
+                advance();
+                break;
+            }
+            advance();
+        }
+
+        // Execute loop
+        loop_state loop {};
+        loop.type = loop_type::for_loop;
+        loop.variable_name = var_name;
+        loop.current_value = start_value;
+        loop.end_value = end_value;
+        loop.step_value = step_value;
+        loop.source_file = source_file;
+        loop.source_line = source_line;
+
+        m_loop_stack.push_back(loop);
+
+        std::size_t iteration = 0;
+        std::int64_t i = start_value;
+
+        auto should_continue_loop = [&] () -> bool
+        {
+            if (step_value > 0)
+            {
+                return i < end_value;
+            }
+            else
+            {
+                return i > end_value;
+            }
+        };
+
+        while (should_continue_loop())
+        {
+            m_loop_stack.back().iteration_count = iteration;
+            m_loop_stack.back().current_value = i;
+            m_loop_stack.back().should_continue = false;
+
+            auto iter_result = process_loop_iteration(
+                body_tokens, 
+                m_loop_stack.back()
+            );
+
+            if (iter_result.has_value() == false)
+            {
+                m_loop_stack.pop_back();
+                m_macro_table.undefine_macro(var_name);
+                return g10::error(iter_result.error());
+            }
+
+            if (m_loop_stack.back().should_break)
+            {
+                break;
+            }
+
+            i += step_value;
+            ++iteration;
+        }
+
+        m_loop_stack.pop_back();
+        m_macro_table.undefine_macro(var_name);
+
+        return {};
+    }
+
+    auto preprocessor::handle_endfor_directive () -> g10::result<void>
+    {
+        return g10::error(" - '.endfor'/'.endf' without matching '.for'.");
+    }
+
+    auto preprocessor::handle_while_directive () -> g10::result<void>
+    {
+        // Store source info
+        auto tok_result = current_token();
+        if (tok_result.has_value() == false)
+        {
+            return g10::error(" - Internal error: expected .while token.");
+        }
+        const token& tok = tok_result.value();
+        std::string source_file { tok.source_file };
+        std::size_t source_line = tok.source_line;
+
+        // Advance past .while
+        advance();
+
+        // Collect condition tokens until comma or newline
+        std::vector<token> condition_tokens {};
+        std::string var_name {};
+
+        while (is_at_end() == false)
+        {
+            if (handle_line_continuation()) continue;
+
+            auto t = current_token();
+            if (t.has_value() == false) break;
+            const token& curr = t.value();
+
+            if (curr.type == token_type::new_line)
+            {
+                advance();
+                break;
+            }
+
+            if (curr.type == token_type::comma)
+            {
+                advance();
+                // Next token should be variable name
+                auto var_result = current_token();
+                if (var_result.has_value() == true)
+                {
+                    const token& var_tok = var_result.value();
+                    if (var_tok.type == token_type::identifier)
+                    {
+                        var_name = var_tok.lexeme;
+                        advance();
+                    }
+                }
+                // Skip to end of line
+                while (is_at_end() == false)
+                {
+                    auto nl = current_token();
+                    if (nl.has_value() == false) break;
+                    if (nl.value().get().type == token_type::new_line)
+                    {
+                        advance();
+                        break;
+                    }
+                    advance();
+                }
+                break;
+            }
+
+            condition_tokens.push_back(curr);
+            advance();
+        }
+
+        if (condition_tokens.empty())
+        {
+            return g10::error(" - Expected condition after '.while'.");
+        }
+
+        // Validate no braces in condition expression
+        auto validate_result = validate_no_braces(condition_tokens, ".while");
+        if (validate_result.has_value() == false)
+        {
+            return g10::error(validate_result.error());
+        }
+
+        // Collect loop body
+        auto body_result = collect_loop_body(directive_type::endwhile);
+        if (body_result.has_value() == false)
+        {
+            return g10::error(
+                "{}\n - In '.while' starting at '{}:{}'",
+                body_result.error(),
+                source_file,
+                source_line
+            );
+        }
+
+        std::vector<token> body_tokens = std::move(body_result.value());
+
+        // Skip the .endwhile directive
+        advance();
+        while (is_at_end() == false)
+        {
+            auto t = current_token();
+            if (t.has_value() == false) break;
+            if (t.value().get().type == token_type::new_line)
+            {
+                advance();
+                break;
+            }
+            advance();
+        }
+
+        // Execute loop
+        loop_state loop {};
+        loop.type = loop_type::while_loop;
+        loop.variable_name = var_name;
+        loop.condition_tokens = condition_tokens;
+        loop.source_file = source_file;
+        loop.source_line = source_line;
+
+        m_loop_stack.push_back(loop);
+
+        std::size_t iteration = 0;
+        constexpr std::size_t MAX_ITERATIONS = 1000000;  // Safety limit
+
+        while (iteration < MAX_ITERATIONS)
+        {
+            // Evaluate condition
+            pp_evaluator cond_eval { condition_tokens, m_macro_table };
+            auto cond_result = cond_eval.evaluate();
+            if (cond_result.has_value() == false)
+            {
+                m_loop_stack.pop_back();
+                if (var_name.empty() == false)
+                {
+                    m_macro_table.undefine_macro(var_name);
+                }
+                return g10::error(
+                    " - Failed to evaluate while condition:\n{}",
+                    cond_result.error()
+                );
+            }
+
+            bool condition = pp_evaluator::to_boolean(cond_result.value());
+            if (condition == false)
+            {
+                break;
+            }
+
+            m_loop_stack.back().iteration_count = iteration;
+            m_loop_stack.back().current_value = 
+                static_cast<std::int64_t>(iteration);
+            m_loop_stack.back().should_continue = false;
+
+            auto iter_result = process_loop_iteration(
+                body_tokens, 
+                m_loop_stack.back()
+            );
+
+            if (iter_result.has_value() == false)
+            {
+                m_loop_stack.pop_back();
+                if (var_name.empty() == false)
+                {
+                    m_macro_table.undefine_macro(var_name);
+                }
+                return g10::error(iter_result.error());
+            }
+
+            if (m_loop_stack.back().should_break)
+            {
+                break;
+            }
+
+            ++iteration;
+        }
+
+        if (iteration >= MAX_ITERATIONS)
+        {
+            m_loop_stack.pop_back();
+            if (var_name.empty() == false)
+            {
+                m_macro_table.undefine_macro(var_name);
+            }
+            return g10::error(
+                " - While loop exceeded maximum iterations ({}).\n"
+                " - Possible infinite loop at '{}:{}'",
+                MAX_ITERATIONS,
+                source_file,
+                source_line
+            );
+        }
+
+        m_loop_stack.pop_back();
+        if (var_name.empty() == false)
+        {
+            m_macro_table.undefine_macro(var_name);
+        }
+
+        return {};
+    }
+
+    auto preprocessor::handle_endwhile_directive () -> g10::result<void>
+    {
+        return g10::error(" - '.endwhile'/'.endw' without matching '.while'.");
+    }
+
+    auto preprocessor::handle_continue_directive () -> g10::result<void>
+    {
+        if (m_loop_stack.empty())
+        {
+            return g10::error(" - '.continue' outside of loop.");
+        }
+
+        // Advance past .continue
+        advance();
+
+        // Skip to end of line
+        while (is_at_end() == false)
+        {
+            auto t = current_token();
+            if (t.has_value() == false) break;
+            if (t.value().get().type == token_type::new_line)
+            {
+                advance();
+                break;
+            }
+            advance();
+        }
+
+        // Set flag on innermost loop
+        m_loop_stack.back().should_continue = true;
+
+        return {};
+    }
+
+    auto preprocessor::handle_break_directive () -> g10::result<void>
+    {
+        if (m_loop_stack.empty())
+        {
+            return g10::error(" - '.break' outside of loop.");
+        }
+
+        // Advance past .break
+        advance();
+
+        // Skip to end of line
+        while (is_at_end() == false)
+        {
+            auto t = current_token();
+            if (t.has_value() == false) break;
+            if (t.value().get().type == token_type::new_line)
+            {
+                advance();
+                break;
+            }
+            advance();
+        }
+
+        // Set flag on innermost loop
+        m_loop_stack.back().should_break = true;
+
+        return {};
+    }
+}
+
 /* Private Methods - Macro Expansion ******************************************/
 
 namespace g10asm
@@ -780,6 +2362,7 @@ namespace g10asm
         std::vector<token> expr_tokens {};
         std::size_t brace_depth = 1;
 
+        bool quote_string = true;
         while (is_at_end() == false && brace_depth > 0)
         {
             auto inner_tok_result = current_token();
@@ -799,10 +2382,26 @@ namespace g10asm
             else if (inner_tok.type == token_type::right_brace)
             {
                 --brace_depth;
+
                 if (brace_depth > 0)
                 {
                     expr_tokens.push_back(inner_tok);
                 }
+
+                // If the token after this is a colon, do not quote the string
+                if (brace_depth == 0 && quote_string == true)
+                {
+                    auto next_result = peek_token(1);
+                    if (next_result.has_value() == true)
+                    {
+                        const token& next_tok = next_result.value();
+                        if (next_tok.type == token_type::colon)
+                        {
+                            quote_string = false;
+                        }
+                    }
+                }
+
                 advance();
             }
             else if (inner_tok.type == token_type::new_line)
@@ -839,7 +2438,20 @@ namespace g10asm
 
         // Convert result to string and append to output
         std::string result_str = pp_evaluator::value_to_string(eval_result.value());
-        
+        if (
+            std::holds_alternative<pp_string>(eval_result.value()) == true &&
+            quote_string == false
+        )
+        {
+            // `result_str` has quotes around it - remove them.
+            if (result_str.size() >= 2 &&
+                result_str.front() == '"' &&
+                result_str.back() == '"')
+            {
+                result_str = result_str.substr(1, result_str.size() - 2);
+            }
+        }
+
         // Add space before if needed
         if (m_needs_space == true && result_str.empty() == false)
         {
@@ -1050,7 +2662,7 @@ namespace g10asm
                     return g10::error(eval_result.error());
                 }
 
-                result_ident += pp_evaluator::value_to_string(eval_result.value());
+                result_ident += pp_evaluator::value_to_string(eval_result.value(), false);
 
                 // Check if next token is adjacent identifier or brace
                 auto after_result = current_token();
@@ -1248,7 +2860,7 @@ namespace g10asm
             return g10::error(eval_result.error());
         }
 
-        return pp_evaluator::value_to_string(eval_result.value());
+        return pp_evaluator::value_to_string(eval_result.value(), false);
     }
 
     auto preprocessor::are_tokens_adjacent (

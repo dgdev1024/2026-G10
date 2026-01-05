@@ -88,11 +88,17 @@ namespace g10asm
         /**
          * @brief   Converts a pp_value to its string representation for output.
          * 
-         * @param   value   The value to convert.
+         * @param   value       The value to convert.
+         * @param   quote_strings   If true, wrap string values in double quotes.
+         *                          Defaults to true for standalone expressions,
+         *                          but should be false for interpolation contexts.
          * 
          * @return  The string representation of the value.
          */
-        static auto value_to_string (const pp_value& value) -> std::string;
+        static auto value_to_string (
+            const pp_value& value, 
+            bool quote_strings = true
+        ) -> std::string;
 
         /**
          * @brief   Converts a value to an integer for arithmetic.
@@ -140,9 +146,35 @@ namespace g10asm
     private: /* Private Methods - Expression Parsing **************************/
 
         /**
-         * @brief   Parses a primary expression (literals, identifiers, parens).
+         * @brief   Parses a primary expression (literals, identifiers, parens,
+         *          function calls).
          */
         auto parse_primary () -> g10::result<pp_value>;
+
+        /**
+         * @brief   Parses a function call.
+         * 
+         * @param   func_name   The name of the function being called.
+         * 
+         * @return  If successful, returns the result of the function call;
+         *          Otherwise, returns an error.
+         */
+        auto parse_function_call (const std::string& func_name) 
+            -> g10::result<pp_value>;
+
+        /**
+         * @brief   Dispatches a built-in function call.
+         * 
+         * @param   func_name   The name of the function being called.
+         * @param   args        The arguments passed to the function.
+         * 
+         * @return  If successful, returns the result of the function call;
+         *          Otherwise, returns an error.
+         */
+        auto dispatch_function (
+            const std::string& func_name,
+            const std::vector<pp_value>& args
+        ) -> g10::result<pp_value>;
 
         /**
          * @brief   Parses a unary expression (!, ~, +, -).
@@ -204,12 +236,85 @@ namespace g10asm
          */
         auto parse_expression () -> g10::result<pp_value>;
 
-    private: /* Private Methods - Value Operations ****************************/
+    public: /* Public Methods - Value Operations ******************************/
 
         /**
          * @brief   Converts a value to a boolean.
+         * 
+         * @param   value   The value to convert.
+         * 
+         * @return  `true` if the value is truthy; `false` otherwise.
          */
         static auto to_boolean (const pp_value& value) -> bool;
+
+    private: /* Private Methods - Value Operations ****************************/
+
+        /**
+         * @brief   Converts a value to a fixed-point number.
+         */
+        static auto to_number (const pp_value& value) 
+            -> g10::result<pp_number>;
+
+        /**
+         * @brief   Converts a value to a string.
+         */
+        static auto to_string_value (const pp_value& value) 
+            -> g10::result<pp_string>;
+
+    private: /* Private Methods - Built-in Functions *************************/
+
+        // Integer Functions
+        auto fn_high (const std::vector<pp_value>& args) -> g10::result<pp_value>;
+        auto fn_low (const std::vector<pp_value>& args) -> g10::result<pp_value>;
+        auto fn_bitwidth (const std::vector<pp_value>& args) -> g10::result<pp_value>;
+        auto fn_abs (const std::vector<pp_value>& args) -> g10::result<pp_value>;
+        auto fn_min (const std::vector<pp_value>& args) -> g10::result<pp_value>;
+        auto fn_max (const std::vector<pp_value>& args) -> g10::result<pp_value>;
+        auto fn_clamp (const std::vector<pp_value>& args) -> g10::result<pp_value>;
+
+        // Fixed-Point Arithmetic Functions
+        auto fn_fmul (const std::vector<pp_value>& args) -> g10::result<pp_value>;
+        auto fn_fdiv (const std::vector<pp_value>& args) -> g10::result<pp_value>;
+        auto fn_fmod (const std::vector<pp_value>& args) -> g10::result<pp_value>;
+
+        // Fixed-Point Conversion Functions
+        auto fn_fint (const std::vector<pp_value>& args) -> g10::result<pp_value>;
+        auto fn_ffrac (const std::vector<pp_value>& args) -> g10::result<pp_value>;
+        auto fn_round (const std::vector<pp_value>& args) -> g10::result<pp_value>;
+        auto fn_ceil (const std::vector<pp_value>& args) -> g10::result<pp_value>;
+        auto fn_floor (const std::vector<pp_value>& args) -> g10::result<pp_value>;
+        auto fn_trunc (const std::vector<pp_value>& args) -> g10::result<pp_value>;
+
+        // Fixed-Point Math Functions
+        auto fn_pow (const std::vector<pp_value>& args) -> g10::result<pp_value>;
+        auto fn_sqrt (const std::vector<pp_value>& args) -> g10::result<pp_value>;
+        auto fn_exp (const std::vector<pp_value>& args) -> g10::result<pp_value>;
+        auto fn_ln (const std::vector<pp_value>& args) -> g10::result<pp_value>;
+        auto fn_log2 (const std::vector<pp_value>& args) -> g10::result<pp_value>;
+        auto fn_log10 (const std::vector<pp_value>& args) -> g10::result<pp_value>;
+        auto fn_log (const std::vector<pp_value>& args) -> g10::result<pp_value>;
+
+        // Trigonometric Functions
+        auto fn_sin (const std::vector<pp_value>& args) -> g10::result<pp_value>;
+        auto fn_cos (const std::vector<pp_value>& args) -> g10::result<pp_value>;
+        auto fn_tan (const std::vector<pp_value>& args) -> g10::result<pp_value>;
+        auto fn_asin (const std::vector<pp_value>& args) -> g10::result<pp_value>;
+        auto fn_acos (const std::vector<pp_value>& args) -> g10::result<pp_value>;
+        auto fn_atan (const std::vector<pp_value>& args) -> g10::result<pp_value>;
+        auto fn_atan2 (const std::vector<pp_value>& args) -> g10::result<pp_value>;
+
+        // String Functions
+        auto fn_strlen (const std::vector<pp_value>& args) -> g10::result<pp_value>;
+        auto fn_strcmp (const std::vector<pp_value>& args) -> g10::result<pp_value>;
+        auto fn_substr (const std::vector<pp_value>& args) -> g10::result<pp_value>;
+        auto fn_indexof (const std::vector<pp_value>& args) -> g10::result<pp_value>;
+        auto fn_toupper (const std::vector<pp_value>& args) -> g10::result<pp_value>;
+        auto fn_tolower (const std::vector<pp_value>& args) -> g10::result<pp_value>;
+        auto fn_concat (const std::vector<pp_value>& args) -> g10::result<pp_value>;
+
+        // Miscellaneous Functions
+        auto fn_defined (const std::vector<pp_value>& args) -> g10::result<pp_value>;
+        auto fn_typeof (const std::vector<pp_value>& args) -> g10::result<pp_value>;
 
     private: /* Private Members ***********************************************/
 
@@ -234,6 +339,12 @@ namespace g10asm
          *          successfully evaluated.
          */
         bool m_good { false };
+
+        /**
+         * @brief   Stores the last parsed identifier for special functions
+         *          like `defined()` that need raw identifier access.
+         */
+        std::string m_last_identifier {};
 
     };
 }

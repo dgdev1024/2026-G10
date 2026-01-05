@@ -119,6 +119,7 @@ namespace g10asm
         { ".endif", keyword_type::preprocessor_directive, std::to_underlying(directive_type::endif), 0 },
         { ".endc", keyword_type::preprocessor_directive, std::to_underlying(directive_type::endif), 0 },
         { ".repeat", keyword_type::preprocessor_directive, std::to_underlying(directive_type::repeat), 0 },
+        { ".rept", keyword_type::preprocessor_directive, std::to_underlying(directive_type::repeat), 0 },
         { ".endrepeat", keyword_type::preprocessor_directive, std::to_underlying(directive_type::endrepeat), 0 },
         { ".endr", keyword_type::preprocessor_directive, std::to_underlying(directive_type::endrepeat), 0 },
         { ".for", keyword_type::preprocessor_directive, std::to_underlying(directive_type::for_), 0 },
